@@ -1,0 +1,45 @@
+# systemd unit for the WVTT server.
+#
+# Install:
+#   sudo cp deploy/wvtt.service /etc/systemd/system/wvtt.service
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now wvtt
+#
+# Adjust User, WorkingDirectory and ExecStart if you deploy somewhere other than
+# /home/mastervash/wvtt.
+
+[Unit]
+Description=WVTT — Web Virtual Table Top
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=mastervash
+Group=mastervash
+WorkingDirectory=/home/mastervash/wvtt
+Environment=NODE_ENV=production
+Environment=PORT=2567
+ExecStart=/usr/bin/node server/dist/index.js
+Restart=on-failure
+RestartSec=3
+
+# The process only needs to read its own directory and open a port.
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=/home/mastervash/wvtt
+ProtectKernelTunables=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+RestrictNamespaces=true
+LockPersonality=true
+MemoryMax=1G
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=wvtt
+
+[Install]
+WantedBy=multi-user.target

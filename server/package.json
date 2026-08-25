@@ -1,0 +1,28 @@
+{
+  "name": "@wvtt/server",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "build": "tsc -p tsconfig.json --noEmit && esbuild src/index.ts --bundle --platform=node --format=esm --target=node20 --outfile=dist/index.js --sourcemap --external:@colyseus/core --external:@colyseus/ws-transport --external:@colyseus/schema --external:express --external:cors --external:quickjs-emscripten",
+    "start": "node dist/index.js"
+  },
+  "dependencies": {
+    "@colyseus/core": "0.16.24",
+    "@colyseus/schema": "3.0.76",
+    "@colyseus/ws-transport": "0.16.5",
+    "@wvtt/shared": "*",
+    "cors": "^2.8.6",
+    "express": "^5.2.1",
+    "quickjs-emscripten": "^0.32.0"
+  },
+  "devDependencies": {
+    "@types/cors": "^2.8.17",
+    "@types/express": "^5.0.6",
+    "@types/node": "^26.3.0",
+    "esbuild": "^0.28.2",
+    "tsx": "^4.23.12",
+    "typescript": "^5.9.3"
+  }
+}

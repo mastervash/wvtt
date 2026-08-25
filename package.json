@@ -1,0 +1,34 @@
+{
+  "name": "wvtt",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "workspaces": [
+    "shared",
+    "server",
+    "client"
+  ],
+  "scripts": {
+    "dev": "concurrently -n server,client -c cyan,magenta \"npm:dev:server\" \"npm:dev:client\"",
+    "dev:server": "npm run dev --workspace=server",
+    "dev:client": "npm run dev --workspace=client",
+    "build": "npm run build --workspace=client && npm run build --workspace=server",
+    "start": "NODE_ENV=production node server/dist/index.js",
+    "typecheck": "tsc -p server/tsconfig.json --noEmit && tsc -p client/tsconfig.json --noEmit",
+    "test": "tsx server/test/hiddenInfo.ts && tsx server/test/scripting.ts && tsx server/test/minimalPack.ts && tsx server/test/chessRules.ts && tsx server/test/enforcement.ts && tsx server/test/eightsRules.ts && tsx server/test/stacking.ts && tsx server/test/clock.ts && tsx server/test/security.ts && tsx server/test/persistence.ts",
+    "test:e2e": "node test/e2e/run.mjs",
+    "test:all": "npm run typecheck && npm test && npm run test:e2e && npm run test:prod",
+    "test:prod": "node test/e2e/run-production.mjs"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.2",
+    "playwright": "^1.50.0",
+    "tsx": "^4.23.12",
+    "typescript": "^5.9.3"
+  },
+  "description": "WVTT \u2014 Web Virtual Table Top. Browser multiplayer 3D sandbox tabletop with scriptable, shareable game packs.",
+  "license": "UNLICENSED",
+  "engines": {
+    "node": ">=20"
+  }
+}

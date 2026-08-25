@@ -1,0 +1,9 @@
+node_modules/
+dist/
+*.log
+.env
+.DS_Store
+screenshots/
+test/e2e/screenshots/*.png
+server/data/
+**/data/rooms/
