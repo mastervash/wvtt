@@ -14,7 +14,14 @@ services:
     restart: unless-stopped
     ports:
       # Set WVTT_PORT if something else already owns 2567 on this machine.
-      - "${WVTT_PORT:-2567}:2567"
+      #
+      # WVTT_BIND is the more important one on a public host. Docker publishes ports by
+      # writing NAT rules that run BEFORE ufw or firewalld, so a port published on the
+      # default 0.0.0.0 is reachable from the internet even when your firewall says the
+      # opposite. If a reverse proxy is doing TLS in front of this, bind to the address
+      # that proxy reaches you on — 127.0.0.1, or the bridge address of the proxy's
+      # container network — and nothing else can get in.
+      - "${WVTT_BIND:-0.0.0.0}:${WVTT_PORT:-2567}:2567"
     environment:
       # How long a table is kept after everyone leaves, so players can come back to it.
       ROOM_TTL_HOURS: ${ROOM_TTL_HOURS:-168}

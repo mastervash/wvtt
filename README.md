@@ -22,6 +22,7 @@ restart does not lose a game in progress.
 | Setting | Default | What it does |
 |---|---|---|
 | `WVTT_PORT` | `2567` | Host port to publish. Change it if 2567 is taken. |
+| `WVTT_BIND` | `0.0.0.0` | Host address to publish on. Set this if a proxy fronts the app — see below. |
 | `ROOM_TTL_HOURS` | `168` | How long a table is kept after everyone leaves. |
 | `DATA_DIR` | `/data` | Where room snapshots go inside the container. |
 
@@ -38,12 +39,27 @@ version. To build your own instead, uncomment `build: .` in
 
 ### Putting it on the internet
 
-The container speaks plain HTTP; put a reverse proxy in front of it for TLS. Only two
-things matter, whatever proxy you use:
+The container speaks plain HTTP; put a reverse proxy in front of it for TLS. Three things
+matter, whatever proxy you use:
 
 - **Websockets must be enabled.** The API and the game share one connection.
 - **Do not buffer, and do not time out an idle connection quickly.** A table can sit
   still for a long time between turns.
+- **Set `WVTT_BIND`.** Docker publishes ports by writing NAT rules that run *before* ufw
+  or firewalld, so a port published on the default `0.0.0.0` is reachable from the
+  internet even when your firewall is configured to refuse it. Bind to the address your
+  proxy reaches the app on and nothing else can get in:
+
+  ```bash
+  # proxy on the same host
+  WVTT_BIND=127.0.0.1 docker compose up -d
+
+  # proxy in a container, reaching the host over its bridge
+  WVTT_BIND=172.18.0.1 docker compose up -d
+  ```
+
+  `docker compose ps` shows what you actually published: `0.0.0.0:2567->2567/tcp` is open
+  to the world, `127.0.0.1:2567->2567/tcp` is not.
 
 There is a worked nginx site and a systemd unit for a non-Docker install in
 [deploy/](deploy/README.md).
