@@ -1,0 +1,18 @@
+# Everything the image does not need. Keeping the build context small matters most for
+# node_modules, which is hundreds of megabytes and is reinstalled inside the image
+# anyway.
+node_modules
+**/node_modules
+dist
+**/dist
+.git
+.github
+server/data
+**/data/rooms
+test/e2e/screenshots
+*.log
+.env
+.DS_Store
+Dockerfile
+.dockerignore
+docker-compose.yml

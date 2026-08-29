@@ -1,0 +1,32 @@
+# WVTT, ready to run.
+#
+#   docker compose up -d
+#
+# The app is one process serving the client, the API and the game websocket together, so
+# this is one service and no more. Put a reverse proxy in front of it for TLS.
+services:
+  wvtt:
+    image: ghcr.io/mastervash/wvtt:latest
+    # To run your own build instead of the published image, comment out `image` above
+    # and uncomment this:
+    # build: .
+    container_name: wvtt
+    restart: unless-stopped
+    ports:
+      # Set WVTT_PORT if something else already owns 2567 on this machine.
+      - "${WVTT_PORT:-2567}:2567"
+    environment:
+      # How long a table is kept after everyone leaves, so players can come back to it.
+      ROOM_TTL_HOURS: ${ROOM_TTL_HOURS:-168}
+    volumes:
+      # Room snapshots. Without this, a restart loses every table in progress.
+      - wvtt-data:/data
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:2567/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      start_period: 10s
+      retries: 3
+
+volumes:
+  wvtt-data:

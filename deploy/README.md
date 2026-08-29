@@ -1,4 +1,8 @@
-# Deploying
+# Deploying without Docker
+
+Most people should use the container: `docker compose up -d`, described in the
+[main README](../README.md#run-your-own). This directory is for running the server
+directly on a host with systemd and nginx, which is how the author's instance runs.
 
 The whole app is one Node process: it serves the built client, the JSON API and the
 game websocket on a single port. nginx only needs to proxy that one upstream.

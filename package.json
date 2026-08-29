@@ -27,7 +27,7 @@
     "typescript": "^5.9.3"
   },
   "description": "WVTT \u2014 Web Virtual Table Top. Browser multiplayer 3D sandbox tabletop with scriptable, shareable game packs.",
-  "license": "UNLICENSED",
+  "license": "MIT",
   "engines": {
     "node": ">=20"
   }

@@ -6,7 +6,49 @@ a phone or a desktop, in a room you share with a six-character code. No account 
 Games are **packs**: plain JSON describing the components, the table layout and an
 optional rules script. Chess and poker are packs. So is anything you make.
 
-## Running it
+## Run your own
+
+One container, one port, no database. Everything below assumes nothing but Docker.
+
+```bash
+curl -O https://raw.githubusercontent.com/mastervash/wvtt/main/docker-compose.yml
+docker compose up -d
+```
+
+Open <http://localhost:2567>. That is the whole install: the image serves the client,
+the JSON API and the game websocket together, and keeps tables in a named volume so a
+restart does not lose a game in progress.
+
+| Setting | Default | What it does |
+|---|---|---|
+| `WVTT_PORT` | `2567` | Host port to publish. Change it if 2567 is taken. |
+| `ROOM_TTL_HOURS` | `168` | How long a table is kept after everyone leaves. |
+| `DATA_DIR` | `/data` | Where room snapshots go inside the container. |
+
+```bash
+WVTT_PORT=8080 docker compose up -d   # somewhere else
+docker compose logs -f                # what it is doing
+docker compose pull && docker compose up -d   # update
+```
+
+Images are built by GitHub Actions for `linux/amd64` and `linux/arm64` and published to
+`ghcr.io/mastervash/wvtt` — `latest` follows `main`, and each release is tagged with its
+version. To build your own instead, uncomment `build: .` in
+[docker-compose.yml](docker-compose.yml) and run `docker compose up -d --build`.
+
+### Putting it on the internet
+
+The container speaks plain HTTP; put a reverse proxy in front of it for TLS. Only two
+things matter, whatever proxy you use:
+
+- **Websockets must be enabled.** The API and the game share one connection.
+- **Do not buffer, and do not time out an idle connection quickly.** A table can sit
+  still for a long time between turns.
+
+There is a worked nginx site and a systemd unit for a non-Docker install in
+[deploy/](deploy/README.md).
+
+## Working on it
 
 ```bash
 npm install
@@ -22,16 +64,15 @@ npm run build      # build client and server
 npm start          # serve the built client and the game from one port
 ```
 
-For the VPS, see [deploy/README.md](deploy/README.md) — a systemd unit and an nginx site
-are included.
-
 ## How it is put together
 
 ```
-shared/    types, component helpers, the built-in packs, the pack format reference
+shared/    types, component helpers, pack validation, the built-in packs
 server/    authoritative game server: engine, ops, visibility, script sandbox
 client/    Vite + React + three.js
 test/e2e/  browser tests driven by Playwright
+deploy/    systemd unit and nginx site for a non-Docker install
+Dockerfile, docker-compose.yml
 ```
 
 Three layers, and the boundary between them is the point:
@@ -251,8 +292,13 @@ set `ROOM_TTL_HOURS` to change that — and rejoining rebuilds it with the cards
 they were left. Seats are not kept: sit down again and your hand is still yours.
 
 Tables are snapshotted to disk every minute and when they close, so a room code keeps
-working across a restart or a deploy. Snapshots older than a week are swept up at
-startup. Set `DATA_DIR` to move them; the default is `server/data`.
+working across a restart or a deploy. Stale ones are swept hourly. `DATA_DIR` sets where
+they go — `server/data` from a source checkout, `/data` in the container, which is what
+the compose file's volume is mounted on.
+
+The snapshots hold every card's identity, including the face-down ones. They are written
+`0600` and the directory `0700`, and the container runs as a non-root user; anything that
+can read them can read the whole table.
 
 Players are deliberately **not** restored. Sessions do not survive a restart, so everyone
 rejoins as a new guest and takes a seat again — re-granting a peek to whoever inherits a
@@ -282,8 +328,9 @@ VITE_SERVER_HOST=localhost:2599 npm run dev:client
 
 ## Licence
 
-None yet — the code is public to read, not yet licensed for reuse. If you want to build
-on it, open an issue and ask.
+MIT — see [LICENSE](LICENSE). The card faces, dice and chips are drawn procedurally, so
+there is no third-party artwork in here to trip over. The two party packs ship original
+text, not licensed content.
 
 ## Known limits
 
