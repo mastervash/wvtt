@@ -41,6 +41,14 @@ export interface ClientLimits {
   /** Expensive operations: loading a pack, resetting the table. */
   heavy: Bucket;
   chat: Bucket;
+  /**
+   * Pings, which are broadcast to every client and animate on every screen.
+   *
+   * They ride the ordinary op budget otherwise, which allows over a hundred a second —
+   * enough for one player to cover everyone else's table in rings. Deliberately close
+   * to what a person can actually click.
+   */
+  ping: Bucket;
 }
 
 export function newClientLimits(): ClientLimits {
@@ -48,5 +56,6 @@ export function newClientLimits(): ClientLimits {
     ops: bucket(240, 120),
     heavy: bucket(3, 0.3),
     chat: bucket(8, 1),
+    ping: bucket(4, 1),
   };
 }

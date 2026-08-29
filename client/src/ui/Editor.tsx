@@ -9,10 +9,10 @@
  * is made of, which is the fastest way to learn the format.
  */
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   buildPrompt, GAME_SHAPES, TURN_STRUCTURES, WIN_CONDITIONS, COMPONENT_SETS,
-  scriptApiReference, standardDeck, textDeck, diceSet, chipSet, tokenSet,
+  scriptApiReference, standardDeck, textDeck, diceSet, chipSet, tokenSet, validatePack,
   type GamePack, type ComponentDef, type ZoneDef,
 } from '@wvtt/shared';
 import { useStore } from '../net/store';
@@ -41,15 +41,46 @@ const BLANK: GamePack = {
   setup: [],
 };
 
+/**
+ * Where the work in progress is kept between sessions.
+ *
+ * A pack takes real effort to write, and the editor used to lose all of it the moment
+ * the panel was closed — including a script someone had just pasted out of an AI
+ * assistant. The draft is saved locally on every change and offered back on reopen.
+ */
+const DRAFT_KEY = 'wvtt:draft-pack';
+
+function loadDraft(): GamePack | null {
+  try {
+    const raw = localStorage.getItem(DRAFT_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as GamePack;
+    return parsed?.manifest ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+function saveDraft(pack: GamePack) {
+  try {
+    localStorage.setItem(DRAFT_KEY, JSON.stringify(pack));
+  } catch {
+    // Storage full or disabled: the editor still works, it just cannot remember.
+  }
+}
+
 export function Editor({ onClose }: { onClose: () => void }) {
   const room = useStore((s) => s.room);
   const livePack = useStore((s) => s.pack);
   const showToast = useStore((s) => s.showToast);
 
   const [tab, setTab] = useState<Tab>('design');
-  const [pack, setPack] = useState<GamePack>(() => structuredClone(livePack ?? BLANK));
+  // A saved draft wins over the table's own pack: it is the thing the author was last
+  // working on, and losing it is the expensive mistake.
+  const [pack, setPack] = useState<GamePack>(() => loadDraft() ?? structuredClone(livePack ?? BLANK));
   const [raw, setRaw] = useState('');
   const [rawOpen, setRawOpen] = useState(false);
+  const [savedAt, setSavedAt] = useState<number>(0);
 
   // Prompt generator inputs.
   const [description, setDescription] = useState('');
@@ -60,6 +91,30 @@ export function Editor({ onClose }: { onClose: () => void }) {
   const [useBase, setUseBase] = useState(false);
 
   const json = useMemo(() => JSON.stringify(pack, null, 2), [pack]);
+
+  /**
+   * The same checks the server runs on arrival, run here as you type.
+   *
+   * The commonest way to lose an afternoon with this editor was pasting JSON from an
+   * assistant, pressing Load, and getting a toast that vanished before it could be
+   * read. Now the problems are listed, in place, before anything is sent.
+   */
+  const check = useMemo(() => validatePack(pack), [pack]);
+
+  /**
+   * Draft autosave, debounced.
+   *
+   * localStorage writes are synchronous, and a pack with a long script is not small —
+   * writing the whole thing on every keystroke stutters the script editor. Three
+   * quarters of a second after you stop typing is soon enough to survive a closed tab.
+   */
+  useEffect(() => {
+    const t = window.setTimeout(() => {
+      saveDraft(pack);
+      setSavedAt(Date.now());
+    }, 750);
+    return () => window.clearTimeout(t);
+  }, [json]);
 
   const prompt = useMemo(
     () => buildPrompt({
@@ -104,9 +159,19 @@ export function Editor({ onClose }: { onClose: () => void }) {
 
   function loadIntoTable() {
     if (!room) return;
+    if (!check.ok) {
+      showToast('Fix the problems listed under Export first.');
+      setTab('share');
+      return;
+    }
     room.send('loadPack', { packJson: JSON.stringify(pack) });
     showToast('Loading pack onto the table…');
     onClose();
+  }
+
+  function startFresh() {
+    setPack(structuredClone(BLANK));
+    showToast('Started a new pack. The old draft is gone.');
   }
 
   function importJson(text: string) {
@@ -115,7 +180,10 @@ export function Editor({ onClose }: { onClose: () => void }) {
       if (!parsed?.manifest) throw new Error('That JSON has no manifest.');
       setPack(parsed);
       setRawOpen(false);
-      showToast('Pack imported into the editor.');
+      const verdict = validatePack(parsed);
+      showToast(verdict.ok
+        ? 'Pack imported and it checks out.'
+        : `Imported, but ${verdict.errors.length} problem${verdict.errors.length === 1 ? '' : 's'} to fix.`);
     } catch (err) {
       showToast(err instanceof Error ? err.message : 'That is not valid JSON.');
     }
@@ -134,6 +202,11 @@ export function Editor({ onClose }: { onClose: () => void }) {
     <div className="editor">
       <header>
         <strong>Pack editor</strong>
+        <span className={`verdict ${check.ok ? 'ok' : 'bad'}`} title={check.ok ? 'This pack is well formed' : check.errors[0]}>
+          {check.ok
+            ? `Valid${check.warnings.length ? ` · ${check.warnings.length} warning${check.warnings.length === 1 ? '' : 's'}` : ''}`
+            : `${check.errors.length} problem${check.errors.length === 1 ? '' : 's'}`}
+        </span>
         <nav>
           {(['design', 'pieces', 'rules', 'share'] as Tab[]).map((t) => (
             <button key={t} className={tab === t ? 'on' : ''} onClick={() => setTab(t)}>
@@ -274,6 +347,20 @@ export function Editor({ onClose }: { onClose: () => void }) {
             <p className="lead">
               A pack is one JSON blob. Copy it to share it, or paste one in to play someone else's.
             </p>
+
+            {!check.ok && (
+              <div className="warn bad">
+                <strong>This pack cannot be loaded yet.</strong>
+                <ul>{check.errors.slice(0, 12).map((e) => <li key={e}>{e}</li>)}</ul>
+                {check.errors.length > 12 && <p className="hint">…and {check.errors.length - 12} more.</p>}
+              </div>
+            )}
+            {check.ok && check.warnings.length > 0 && (
+              <div className="warn mild">
+                <strong>Worth a look before you share it.</strong>
+                <ul>{check.warnings.slice(0, 8).map((w) => <li key={w}>{w}</li>)}</ul>
+              </div>
+            )}
             {pack.script?.trim() && (
               <div className="warn">
                 <strong>This pack carries a rules script.</strong> Scripts run on the server and can
@@ -285,11 +372,19 @@ export function Editor({ onClose }: { onClose: () => void }) {
             )}
 
             <div className="row wrap">
-              <button className="primary" onClick={loadIntoTable} disabled={!room}>Load onto this table</button>
+              <button className="primary" onClick={loadIntoTable} disabled={!room || !check.ok}>
+                Load onto this table
+              </button>
               <button onClick={() => copy(json, 'Pack JSON')}>Copy pack JSON</button>
               <button onClick={download}>Download .wvtt.json</button>
               <button onClick={() => { setRaw(''); setRawOpen(true); }}>Paste a pack</button>
+              <button onClick={startFresh}>Start a new pack</button>
             </div>
+            <p className="hint">
+              {savedAt
+                ? 'Saved in this browser. It will still be here next time you open the editor.'
+                : 'Your work is saved in this browser as you go.'}
+            </p>
 
             {rawOpen && (
               <div className="paste">
@@ -358,30 +453,69 @@ function ZoneList({ zones, onChange }: { zones: ZoneDef[]; onChange: (z: ZoneDef
   function patch(i: number, p: Partial<ZoneDef>) {
     onChange(zones.map((z, j) => (i === j ? { ...z, ...p } : z)));
   }
+  /** Small numeric cell. Table coordinates are fractional, so steps are fine-grained. */
+  const num = (
+    value: number, onValue: (n: number) => void, title: string, step = 0.1,
+  ) => (
+    <input
+      type="number" step={step} value={value} title={title} aria-label={title}
+      onChange={(e) => onValue(Number(e.target.value))}
+    />
+  );
   return (
     <div className="rows">
       {zones.map((z, i) => (
-        <div className="zone-row" key={i}>
-          <input value={z.id} onChange={(e) => patch(i, { id: e.target.value })} placeholder="id" />
-          <input value={z.label} onChange={(e) => patch(i, { label: e.target.value })} placeholder="label" />
-          <select value={z.visibility} onChange={(e) => patch(i, { visibility: e.target.value as ZoneDef['visibility'] })}>
-            <option value="public">public</option>
-            <option value="owner">owner only</option>
-            <option value="hidden">hidden</option>
-            <option value="inherit">inherit</option>
-          </select>
-          <select value={z.layout} onChange={(e) => patch(i, { layout: e.target.value as ZoneDef['layout'] })}>
-            <option value="free">free</option>
-            <option value="row">row</option>
-            <option value="fan">fan</option>
-            <option value="grid">grid</option>
-            <option value="stack">stack</option>
-          </select>
-          <input
-            type="number" value={z.ownerSeat ?? -1} title="Owning seat, or -1 for shared"
-            onChange={(e) => patch(i, { ownerSeat: Number(e.target.value) < 0 ? null : Number(e.target.value) })}
-          />
-          <button className="icon" onClick={() => onChange(zones.filter((_, j) => j !== i))} title="Remove">✕</button>
+        <div className="zone-block" key={i}>
+          <div className="zone-row">
+            <input value={z.id} onChange={(e) => patch(i, { id: e.target.value })} placeholder="id" />
+            <input value={z.label} onChange={(e) => patch(i, { label: e.target.value })} placeholder="label" />
+            <select value={z.visibility} onChange={(e) => patch(i, { visibility: e.target.value as ZoneDef['visibility'] })}>
+              <option value="public">public</option>
+              <option value="owner">owner only</option>
+              <option value="hidden">hidden</option>
+              <option value="inherit">inherit</option>
+            </select>
+            <select value={z.layout} onChange={(e) => patch(i, { layout: e.target.value as ZoneDef['layout'] })}>
+              <option value="free">free</option>
+              <option value="row">row</option>
+              <option value="fan">fan</option>
+              <option value="grid">grid</option>
+              <option value="stack">stack</option>
+            </select>
+            <input
+              type="number" value={z.ownerSeat ?? -1} title="Owning seat, or -1 for shared"
+              aria-label="Owning seat"
+              onChange={(e) => patch(i, { ownerSeat: Number(e.target.value) < 0 ? null : Number(e.target.value) })}
+            />
+            <button className="icon" onClick={() => onChange(zones.filter((_, j) => j !== i))} title="Remove">✕</button>
+          </div>
+
+          {/* Position and size were format-only fields until now: a zone could not be
+              placed without hand-editing the JSON, which made the visual editor a
+              half-measure. The table is roughly 14 by 9, x to the right, z toward
+              seat one. */}
+          <div className="zone-row sub">
+            <span className="field-label">x / z</span>
+            {num(z.x, (v) => patch(i, { x: v }), 'Centre across the table')}
+            {num(z.z, (v) => patch(i, { z: v }), 'Centre toward your seat')}
+            <span className="field-label">w / h</span>
+            {num(z.w, (v) => patch(i, { w: v }), 'Width')}
+            {num(z.h, (v) => patch(i, { h: v }), 'Depth')}
+            {z.layout === 'grid' && (
+              <>
+                <span className="field-label">grid</span>
+                {num(z.gridCols ?? 8, (v) => patch(i, { gridCols: Math.max(1, Math.round(v)) }), 'Columns', 1)}
+                {num(z.gridRows ?? 8, (v) => patch(i, { gridRows: Math.max(1, Math.round(v)) }), 'Rows', 1)}
+                <label className="inline">
+                  <input
+                    type="checkbox" checked={!!z.checkered}
+                    onChange={(e) => patch(i, { checkered: e.target.checked })}
+                  />
+                  chequered
+                </label>
+              </>
+            )}
+          </div>
         </div>
       ))}
       <button onClick={() => onChange([...zones, {
@@ -405,25 +539,49 @@ function SetupList({ setup, zones, onChange }: {
   return (
     <div className="rows">
       {setup.map((s, i) => (
-        <div className="zone-row" key={i}>
-          <input
-            value={s.componentIds.join(', ')}
-            onChange={(e) => patch(i, { componentIds: e.target.value.split(',').map((x) => x.trim()).filter(Boolean) })}
-            placeholder="deck:standard52, repeat:d6:2"
-          />
-          <select value={s.as} onChange={(e) => patch(i, { as: e.target.value as 'stack' | 'loose' | 'grid' })}>
-            <option value="stack">as a pile</option>
-            <option value="loose">loose</option>
-            <option value="grid">in a grid</option>
-          </select>
-          <select value={s.zoneId ?? ''} onChange={(e) => patch(i, { zoneId: e.target.value || null })}>
-            <option value="">no zone</option>
-            {zones.map((z) => <option key={z.id} value={z.id}>{z.label}</option>)}
-            <option value="hand{seat}">each seat's hand</option>
-          </select>
-          <label className="inline"><input type="checkbox" checked={s.faceUp} onChange={(e) => patch(i, { faceUp: e.target.checked })} /> face up</label>
-          <label className="inline"><input type="checkbox" checked={s.shuffled} onChange={(e) => patch(i, { shuffled: e.target.checked })} /> shuffled</label>
-          <button className="icon" onClick={() => onChange(setup.filter((_, j) => j !== i))} title="Remove">✕</button>
+        <div className="zone-block" key={i}>
+          <div className="zone-row">
+            <input
+              value={s.componentIds.join(', ')}
+              onChange={(e) => patch(i, { componentIds: e.target.value.split(',').map((x) => x.trim()).filter(Boolean) })}
+              placeholder="deck:standard52, repeat:d6:2"
+            />
+            <select value={s.as} onChange={(e) => patch(i, { as: e.target.value as 'stack' | 'loose' | 'grid' })}>
+              <option value="stack">as a pile</option>
+              <option value="loose">loose</option>
+              <option value="grid">in a grid</option>
+            </select>
+            <select value={s.zoneId ?? ''} onChange={(e) => patch(i, { zoneId: e.target.value || null })}>
+              <option value="">no zone</option>
+              {zones.map((z) => <option key={z.id} value={z.id}>{z.label}</option>)}
+              <option value="hand{seat}">each seat's hand</option>
+            </select>
+            <button className="icon" onClick={() => onChange(setup.filter((_, j) => j !== i))} title="Remove">✕</button>
+          </div>
+
+          <div className="zone-row sub">
+            <label className="inline"><input type="checkbox" checked={s.faceUp} onChange={(e) => patch(i, { faceUp: e.target.checked })} /> face up</label>
+            <label className="inline"><input type="checkbox" checked={s.shuffled} onChange={(e) => patch(i, { shuffled: e.target.checked })} /> shuffled</label>
+            {/* perSeat is how a pack gives every player their own kit — chips, a set of
+                pieces, a starting hand. It has always been in the format and never in
+                this form, so nobody could reach it. */}
+            <label className="inline">
+              <input type="checkbox" checked={!!s.perSeat} onChange={(e) => patch(i, { perSeat: e.target.checked })} />
+              once per seat
+            </label>
+            <span className="field-label">x / z</span>
+            <input type="number" step={0.1} value={s.x} aria-label="Position across the table"
+              onChange={(e) => patch(i, { x: Number(e.target.value) })} />
+            <input type="number" step={0.1} value={s.z} aria-label="Position toward your seat"
+              onChange={(e) => patch(i, { z: Number(e.target.value) })} />
+            {s.as === 'grid' && (
+              <>
+                <span className="field-label">cols</span>
+                <input type="number" step={1} value={s.gridCols ?? 4} aria-label="Grid columns"
+                  onChange={(e) => patch(i, { gridCols: Math.max(1, Math.round(Number(e.target.value))) })} />
+              </>
+            )}
+          </div>
         </div>
       ))}
     </div>

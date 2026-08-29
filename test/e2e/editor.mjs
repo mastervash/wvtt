@@ -110,11 +110,42 @@ await page.click('.editor nav button:has-text("Export")');
 await page.click('button:has-text("Paste a pack")');
 await page.fill('.paste textarea', JSON.stringify({ manifest: { formatVersion: 99, id: 'x', name: 'x', author: 'x', description: 'x', minSeats: 1, maxSeats: 2, defaultEnforcement: 'off' }, components: [], zones: [], setup: [] }));
 await page.click('.paste button:has-text("Import")');
+await page.waitForTimeout(600);
+
+// The editor now runs the server's own validator as you type, so a bad pack never
+// reaches the table at all: the reason is on screen and the Load button is dead. The
+// server still validates everything it is sent — see server/test/security.ts.
+const verdict = (await page.textContent('.editor .verdict')) ?? '';
+check('the editor flags the problem itself', /problem/i.test(verdict), `verdict: "${verdict}"`);
+const problems = await page.locator('.warn.bad li').allTextContents();
+check('and says what is wrong', problems.some((t) => /version/i.test(t)), JSON.stringify(problems));
+check('loading is blocked', await page.locator('button:has-text("Load onto this table")').isDisabled());
+
+console.log('\nThe draft survives closing the editor');
+await page.click('.editor nav button:has-text("Pieces & zones")');
+await page.fill('.editor label:has-text("Name") input', 'Draft Keeper');
+await page.waitForTimeout(500);
+await page.click('.editor > header .icon');
+await page.waitForTimeout(500);
+await page.click('.topbar .icon');
+await page.click('button:has-text("Make your own game")');
+await page.waitForSelector('.editor nav');
+await page.click('.editor nav button:has-text("Pieces & zones")');
 await page.waitForTimeout(400);
-await page.click('button:has-text("Load onto this table")');
-await page.waitForTimeout(1500);
-const toast = await page.textContent('.toast').catch(() => '');
-check('an unsupported pack version is refused with a reason', /version/i.test(toast ?? ''), `toast: "${toast}"`);
+check('the work in progress is still there',
+  (await page.inputValue('.editor label:has-text("Name") input')) === 'Draft Keeper');
+
+console.log('\nZones can be placed without hand-editing JSON');
+// Start from the blank pack, which defines a hand each and a play area.
+await page.click('.editor nav button:has-text("Export")');
+await page.click('button:has-text("Start a new pack")');
+await page.waitForTimeout(500);
+await page.click('.editor nav button:has-text("Pieces & zones")');
+await page.waitForTimeout(400);
+const geo = await page.locator('.zone-row.sub input[type=number]').count();
+check('zone position and size can be edited in the form', geo >= 4, `${geo} fields`);
+check('setup steps offer the per-seat option',
+  (await page.locator('.zone-row.sub label.inline:has-text("once per seat")').count()) >= 0);
 
 console.log(failures === 0 ? '\nALL CHECKS PASSED' : `\n${failures} CHECK(S) FAILED`);
 await browser.close();

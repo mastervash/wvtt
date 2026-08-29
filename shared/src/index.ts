@@ -1,5 +1,6 @@
 export * from './types.js';
 export * from './pack.js';
+export * from './packValidation.js';
 export * from './components.js';
 export * from './scriptApi.js';
 export * from './promptBuilder.js';

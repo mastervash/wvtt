@@ -182,9 +182,18 @@ function applyPlacement(
       p.x = baseX + (i % cols) * 0.5;
       p.z = baseZ + Math.floor(i / cols) * 0.5;
     } else {
-      // 'loose': fan them out slightly so a pile of dice is not one invisible cube.
-      p.x = baseX + (pieces.length > 1 ? (i - (pieces.length - 1) / 2) * 0.42 : 0);
-      p.z = baseZ;
+      // 'loose': spread them out so a handful of dice is not one invisible cube. Past
+      // half a dozen they wrap into rows rather than marching off the end of the tray —
+      // a single row of thirteen dice was wider than the zone holding it, and their
+      // value labels overlapped into an unreadable ribbon.
+      const perRow = pieces.length > 6 ? Math.ceil(Math.sqrt(pieces.length)) : pieces.length;
+      const rows = Math.ceil(pieces.length / perRow);
+      const col = i % perRow;
+      const row = Math.floor(i / perRow);
+      // The last row may be short; centre each row on its own count.
+      const inThisRow = Math.min(perRow, pieces.length - row * perRow);
+      p.x = baseX + (col - (inThisRow - 1) / 2) * 0.55;
+      p.z = baseZ + (row - (rows - 1) / 2) * 0.6;
     }
     p.y = 0;
     p.zoneId = zoneId;
@@ -357,12 +366,31 @@ export function makeStack(state: TableState, pieces: Piece[], x: number, z: numb
   return stack;
 }
 
-export function pushLog(state: TableState, text: string): void {
+/** Who a log line is about, and which filter it falls under. */
+export interface LogActor {
+  name?: string;
+  color?: string;
+  kind?: 'move' | 'cards' | 'dice' | 'table' | 'rules' | 'presence';
+}
+
+/**
+ * Write a line into the table log.
+ *
+ * The log is deliberately chatty — every physical action a player takes lands here, so
+ * a table can reconstruct what happened without anyone narrating it in chat. The
+ * caller supplies the actor separately from the sentence so the client can colour it,
+ * filter by player and filter by category.
+ */
+export function pushLog(state: TableState, text: string, actor: LogActor = {}): void {
   const entry = new LogEntry();
   entry.id = makeId('l');
   entry.text = text;
   entry.at = Date.now();
+  entry.name = actor.name ?? '';
+  entry.color = actor.color ?? '';
+  entry.kind = actor.kind ?? 'table';
   state.log.push(entry);
-  // Keep the log bounded; it is a feed, not an audit trail.
-  while (state.log.length > 60) state.log.shift();
+  // Bounded, but generously: at this verbosity a busy hand of cards is a few dozen
+  // lines on its own, and a log that only remembers the last minute is not a log.
+  while (state.log.length > 250) state.log.shift();
 }

@@ -12,8 +12,8 @@ export interface ScriptMethodDoc {
 }
 
 export const SCRIPT_HANDLERS: ScriptMethodDoc[] = [
-  { signature: 'onSetup(table)', summary: 'Runs once when the pack loads or the table is reset. Deal starting hands and initialise variables here.' },
-  { signature: 'onAction(table, action, payload)', summary: 'Runs when a player presses a game button. `action` matches an id from manifest.actions, which is what puts the button on screen in the first place.' },
+  { signature: 'onSetup(table, reason)', summary: "Runs when the pack loads and when a player presses Reset table. `reason` is \"load\" or \"reset\": on a reset the player wants the table CLEARED, so a pack that deals a hand here should skip the deal and wait for its own New round button." },
+  { signature: 'onAction(table, action, payload)', summary: 'Runs when a player presses a game button. `action` matches an id from manifest.actions, which is what puts the button on screen in the first place. `payload` always carries { seat, name } for whoever pressed it, plus { pieceId } or { stackId } when the action targets a piece or a pile.' },
   { signature: 'validateMove(table, move)', summary: 'Runs before a move is applied while rules are enforced. Return false, or call table.reject("reason"), to refuse it. Return nothing to allow it.' },
 ];
 
@@ -72,7 +72,10 @@ export function packFormatReference(): string {
     "minSeats": 1, "maxSeats": 6,
     "defaultEnforcement": "off" | "advisory" | "enforced",
     "tableColor": "#1f6f4a",
-    "actions": [ { "id": "deal", "label": "Deal hand" } ]
+    "actions": [
+      { "id": "deal", "label": "Deal hand" },
+      { "id": "submit", "label": "Play this card", "target": "piece" }
+    ]
   },
   "components": [ /* the physical objects; see below */ ],
   "zones":      [ /* regions of the table */ ],
@@ -123,6 +126,13 @@ SETUP (what goes on the table at the start):
   "faceUp": false, "shuffled": true,
   "perSeat": false                       // repeat once per seated player
 }
+
+ACTIONS: each entry in manifest.actions becomes a button. Leave "target" off (or set
+it to "none") for a toolbar button. Set it to "piece" or "stack" and the button appears
+in the right-click menu instead, with the id of the thing that was clicked handed to
+onAction as payload.pieceId or payload.stackId — which is how a pack asks a player to
+choose a specific card. payload.seat and payload.name always say who pressed it, and
+are stamped by the server, so a client cannot claim someone else's seat.
 
 LIMITS: at most 500 components, 64 zones, 256 setup steps, 800 pieces on the table,
 a 64 KB script and a 4 MB pack.`;

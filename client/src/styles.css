@@ -82,7 +82,58 @@ input {
 .col { display: flex; flex-direction: column; gap: 10px; }
 .col.narrow { border-left: 1px solid var(--line); padding-left: 24px; }
 
+/* The two game columns are equal halves: neither sandboxes nor scripted games are
+   the sideshow, and a narrow second column would imply one of them was. */
+.split.games { grid-template-columns: 1fr 1fr; }
+.split.games .col + .col { border-left: 1px solid var(--line); padding-left: 24px; }
+.colblurb { margin: -4px 0 4px; }
+/* Two lines of blurb is enough to choose by. Left unclamped, five scripted games push
+   the Create table button below the fold on a laptop. */
+.split.games .pack { padding: 10px 12px; gap: 2px; }
+.split.games .pack .desc {
+  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2;
+  overflow: hidden;
+}
+.seats-line { font-size: 11px; color: var(--muted); }
+.pack.on .seats-line { color: #0b2531; }
+
+/* Tables this browser has been at, and the way back into them. */
+.recent { margin-top: 20px; padding-top: 18px; border-top: 1px solid var(--line); }
+.recent-list { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 8px; }
+.recent-row { display: flex; align-items: stretch; gap: 4px; }
+.recent-row .rejoin {
+  flex: 1; text-align: left; display: flex; flex-direction: column; gap: 2px; padding: 10px 12px;
+}
+.recent-row .rejoin strong { letter-spacing: 0.16em; }
+.recent-row .rejoin span { font-size: 12px; color: var(--muted); }
+.recent-row .icon { padding: 0 10px; color: var(--muted); }
+
+/* The way in to the pack editor, given its own block rather than a line in a menu. */
+.make-own {
+  margin-top: 20px; padding-top: 18px; border-top: 1px solid var(--line);
+  display: flex; align-items: center; gap: 18px; justify-content: space-between;
+}
+.make-own h2 { margin-bottom: 4px; }
+.make-own .hint { margin: 0; max-width: 60ch; }
+.make-own button { white-space: nowrap; }
+@media (max-width: 720px) {
+  .make-own { flex-direction: column; align-items: stretch; }
+}
+
+.lobby-actions {
+  display: flex; align-items: stretch; gap: 12px; margin-top: 20px;
+  padding-top: 18px; border-top: 1px solid var(--line);
+}
+.lobby-actions .primary { flex: 1; }
+.lobby-actions .join { display: flex; gap: 8px; align-items: stretch; min-width: 0; }
+/* min-width: 0 matters: the room-code input is styled with wide letter-spacing at 22px,
+   so its intrinsic minimum is over 300px and a flex item refuses to shrink past that by
+   default — which pushed the whole lobby card wider than a phone screen. */
+.lobby-actions .join input { width: 130px; min-width: 0; }
+.lobby-card, .split.games, .col, .packs { min-width: 0; }
+
 .packs { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 8px; }
+.packs.one { grid-template-columns: 1fr; }
 .pack { text-align: left; display: flex; flex-direction: column; gap: 3px; padding: 12px; }
 .pack span { font-size: 12px; color: var(--muted); }
 .pack.on span { color: #0b2531; }
@@ -95,6 +146,26 @@ input {
 .error { margin-top: 16px; padding: 10px 12px; border-radius: 8px; background: #3a1d21; color: #ffc9c9; border: 1px solid #5c2a30; }
 
 /* ---------------- in-game overlay ---------------- */
+
+/* Every overlay panel lives inside this wrapper so one setting scales the whole
+   interface without touching the 3D table, which zooms with the camera instead.
+   `zoom` rather than `transform: scale()`: a transform would scale the panels but
+   leave their fixed positions where they were, so a scaled-up menu would drift off
+   the corner it is anchored to. The width and height are divided back out so the
+   wrapper still covers exactly one viewport after zooming. */
+.hud-scale {
+  position: absolute; top: 0; left: 0;
+  zoom: var(--ui-scale, 1);
+  /* Percentages already resolve against the unzoomed viewport, so 100% covers the
+     whole screen at any zoom. Dividing by the scale here — the obvious-looking
+     correction — shrinks the overlay instead, and the hand tray stops short of the
+     right-hand edge. */
+  width: 100%;
+  height: 100%;
+  /* The wrapper covers the table; only its panels may swallow pointer events. */
+  pointer-events: none;
+}
+.hud-scale > * { pointer-events: auto; }
 
 .topbar {
   position: absolute; top: 0; left: 0; right: 0;
@@ -121,6 +192,10 @@ input {
 
 .menu {
   position: absolute; top: 58px; left: 10px; z-index: 6;
+  /* Scrolls rather than running off the bottom: at a large interface size the settings
+     panel is taller than the window. Viewport units are NOT affected by the zoom on the
+     overlay, so the available height has to be divided by the scale by hand. */
+  max-height: calc((100vh - 76px) / var(--ui-scale, 1)); overflow-y: auto;
   width: 260px; padding: 14px;
   background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius);
   box-shadow: 0 18px 40px #00000070;
@@ -136,12 +211,54 @@ input {
 
 .log {
   position: absolute; right: 10px; top: 58px; z-index: 6;
-  width: min(320px, 70vw); max-height: 42vh; overflow-y: auto;
-  padding: 10px 12px;
+  width: min(360px, calc(78vw / var(--ui-scale, 1)));
+  max-height: calc(52vh / var(--ui-scale, 1));
+  display: flex; flex-direction: column;
   background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius);
   font-size: 13px;
 }
-.log .line { padding: 4px 0; border-bottom: 1px solid #ffffff08; color: #cbd2da; }
+.log > header {
+  display: flex; align-items: center; gap: 8px;
+  padding: 8px 10px; border-bottom: 1px solid var(--line);
+  font-weight: 600;
+}
+.log > header .check { margin-left: auto; }
+.log > header .icon { padding: 2px 7px; background: none; border: none; }
+.log-filters { display: flex; flex-wrap: wrap; gap: 4px; padding: 8px 10px 4px; }
+.log-filters button { padding: 3px 8px; font-size: 11px; border-radius: 999px; }
+.log-list { overflow-y: auto; padding: 4px 10px 10px; }
+.log .line {
+  display: flex; gap: 6px; align-items: baseline;
+  padding: 4px 0; border-bottom: 1px solid #ffffff08; color: #cbd2da;
+}
+.log .line .at { color: var(--muted); font-size: 11px; font-variant-numeric: tabular-nums; }
+.log .line .who { font-weight: 600; white-space: nowrap; }
+.log .line .who.system { color: var(--muted); font-style: italic; }
+.log .line .what { flex: 1; }
+
+/* Checkbox rows sit on one line. Without this the global `input { width: 100% }` and
+   `label { display: block }` push the box onto its own line above the text — which the
+   pack editor already worked around locally, and the settings panel inherited. */
+label.check { display: flex; align-items: center; gap: 8px; font-size: 13px; }
+label.check input[type="checkbox"] { width: auto; flex: 0 0 auto; margin: 0; }
+
+.check.tiny { font-size: 11px; color: var(--muted); display: flex; align-items: center; gap: 5px; }
+.check.tiny input { width: auto; }
+
+/* The shortcut reference. A definition list rather than a table: it is a glossary,
+   and it has to stay readable at 70% interface scale on a phone. */
+.keys { margin: 4px 0 2px; display: flex; flex-direction: column; gap: 3px; }
+.keys > div { display: flex; align-items: baseline; gap: 8px; }
+.keys dt {
+  flex: 0 0 62px; font: 600 11px ui-monospace, SFMono-Regular, Menlo, monospace;
+  background: var(--panel-2); border: 1px solid var(--line); border-radius: 5px;
+  padding: 2px 5px; text-align: center; white-space: nowrap;
+}
+.keys dd { margin: 0; font-size: 12px; color: var(--muted); }
+
+.slider { display: flex; align-items: center; gap: 10px; }
+.slider input[type="range"] { flex: 1; padding: 0; accent-color: var(--accent); }
+.slider-value { font-size: 12px; color: var(--muted); min-width: 40px; text-align: right; }
 
 /* The hand tray: reading your own cards off an angled 3D table is hopeless on a
    phone, so the same artwork is mirrored here at a readable size. */
@@ -163,6 +280,14 @@ input {
   box-shadow: 0 4px 14px #00000090;
 }
 .tray-card:hover { transform: translateY(-8px); }
+/* The card the pointer is on, wherever the pointer is. Gold rather than the blue used
+   for selection, so "this is the same card" never reads as "this is selected". */
+.tray-card.hot { transform: translateY(-8px); }
+.tray-card.hot img {
+  outline: 3px solid #f2c14e;
+  outline-offset: 1px;
+  box-shadow: 0 0 0 1px #7a5a10, 0 6px 20px #f2c14e66;
+}
 .tray-empty, .tray.spectating { color: var(--muted); font-size: 13px; align-self: center; }
 
 .toast {
@@ -173,10 +298,36 @@ input {
 }
 
 /* Labels drawn inside the 3D scene via drei's Html. */
+.stack-chip {
+  display: flex; align-items: center; gap: 4px;
+  user-select: none; white-space: nowrap;
+}
 .stack-count {
   font: 600 13px system-ui, sans-serif; color: #fff;
   background: #000000a0; border-radius: 999px; padding: 2px 8px;
   user-select: none;
+}
+.stack-name {
+  font: 600 12px system-ui, sans-serif; color: #fff;
+  background: #000000a0; border: 1px solid #ffffff40;
+  border-radius: 999px; padding: 2px 8px; max-width: 140px;
+  overflow: hidden; text-overflow: ellipsis;
+}
+
+/* The rolled value, shown on a billboard above the die rather than painted onto it —
+   a number on a polyhedron's stretched UVs cannot be read from any angle. */
+.die-value {
+  font: 700 19px/1.1 system-ui, sans-serif; color: #fff;
+  background: #12161be6; border: 1.5px solid #ffffff55;
+  border-radius: 9px; padding: 1px 7px;
+  box-shadow: 0 6px 18px #00000090;
+  user-select: none; white-space: nowrap;
+}
+
+.ping-name {
+  font: 700 11px system-ui, sans-serif; color: #06131a;
+  border-radius: 999px; padding: 2px 8px; white-space: nowrap;
+  user-select: none; box-shadow: 0 4px 12px #00000080;
 }
 .cursor-name {
   font: 600 11px system-ui, sans-serif; color: #06131a;
@@ -185,7 +336,13 @@ input {
 }
 
 @media (max-width: 720px) {
-  .split { grid-template-columns: 1fr; }
+  .split, .split.games { grid-template-columns: 1fr; }
+  .split.games .col + .col {
+    border-left: none; border-top: 1px solid var(--line);
+    padding-left: 0; padding-top: 18px;
+  }
+  .lobby-actions { flex-direction: column; }
+  .lobby-actions .join input { width: auto; flex: 1; }
   .col.narrow { border-left: none; border-top: 1px solid var(--line); padding-left: 0; padding-top: 18px; }
   .topbar .actions button { padding: 6px 8px; font-size: 12px; }
   .topbar .players { display: none; }
@@ -304,6 +461,45 @@ select {
   padding: 10px 10px; font-size: 14px;
 }
 .piece-menu button:hover:not(:disabled) { background: var(--panel-2); }
+.piece-menu {
+  max-height: calc(80vh / var(--ui-scale, 1)); overflow-y: auto;
+  /* Capped so a count picker wraps onto two rows instead of stretching the menu into
+     a slab half the width of the table. */
+  max-width: 280px;
+}
+/* The expanded item is highlighted by its text, not by a filled bar: the global
+   button.on rule paints a light background that the transparent menu button then
+   draws dark text on top of, which is unreadable. */
+.piece-menu button.on {
+  background: none; color: var(--accent); font-weight: 600;
+}
+.piece-menu button.on:hover:not(:disabled) { background: var(--panel-2); }
+.pm-title .pm-sub { display: block; text-transform: none; letter-spacing: 0; margin-top: 2px; }
+.pm-item { display: flex; flex-direction: column; }
+.pm-item > button { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.pm-chev { color: var(--muted); font-size: 11px; }
+
+/* Submenus expand in place rather than flying out sideways: a flyout has nowhere to
+   go on a phone held in portrait, and a count picker is the one thing here that has
+   to work under a thumb. */
+.pm-counts { display: flex; flex-wrap: wrap; gap: 4px; padding: 2px 8px 8px; }
+.pm-counts button {
+  min-width: 36px; text-align: center; padding: 7px 6px;
+  background: var(--panel-2); border: 1px solid var(--line); border-radius: 7px;
+  font-variant-numeric: tabular-nums;
+}
+.pm-seats { display: flex; flex-direction: column; gap: 3px; padding: 2px 8px 8px; }
+.pm-seats button { padding: 7px 9px; background: var(--panel-2); border: 1px solid var(--line); }
+.pm-seatno { color: var(--muted); font-size: 11px; }
+.pm-form { display: flex; flex-direction: column; gap: 6px; padding: 2px 8px 8px; }
+.pm-form input { padding: 8px 10px; font-size: 13px; }
+/* .piece-menu button strips the background off every button in the menu, which would
+   leave the Save button's dark text on a dark panel. Put the accent back. */
+.pm-form button.primary {
+  text-align: center; padding: 8px;
+  background: var(--accent); color: #06131a; border: 1px solid var(--accent); font-weight: 600;
+}
+.pm-form button.primary:hover:not(:disabled) { background: #7ad6ff; }
 
 /* Status line a pack's rules script sets, e.g. whose turn it is. */
 .topbar .status {
@@ -312,6 +508,28 @@ select {
   font-size: 13px; font-weight: 600; white-space: nowrap;
 }
 @media (max-width: 720px) { .topbar .status { font-size: 12px; padding: 4px 8px; } }
+
+/* The editor's running verdict, and the problem lists it produces. */
+.editor > header .verdict {
+  font-size: 12px; padding: 3px 9px; border-radius: 999px; white-space: nowrap;
+  border: 1px solid var(--line);
+}
+.editor > header .verdict.ok { color: #7fe0a5; border-color: #2c5c40; background: #14251c; }
+.editor > header .verdict.bad { color: #ffc9c9; border-color: #5c2a30; background: #2a1619; }
+
+.warn ul { margin: 6px 0 0; padding-left: 18px; }
+.warn li { margin: 2px 0; }
+.warn.bad { background: #2a1619; border-color: #5c2a30; }
+.warn.mild { background: #2a2416; border-color: #5c4f2a; }
+
+/* Zones and setup steps are two rows now: identity on top, geometry underneath. */
+.zone-block {
+  display: flex; flex-direction: column; gap: 4px;
+  padding: 8px; border: 1px solid var(--line); border-radius: 8px; background: #12161bcc;
+}
+.zone-row.sub { flex-wrap: wrap; align-items: center; gap: 6px; }
+.zone-row.sub input[type="number"] { max-width: 72px; }
+.zone-row.sub .field-label { font-size: 11px; }
 
 /* ---------------- chat ---------------- */
 

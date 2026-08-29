@@ -32,8 +32,14 @@ export function tileGeometry(w = 0.4, h = 0.6, d = 0.12) {
   return memo(`tile:${w}:${h}:${d}`, () => new THREE.BoxGeometry(w, d, h));
 }
 
-/** Dice use the platonic solid that matches their face count where one exists. */
-export function dieGeometry(sides: number, size = 0.15) {
+/**
+ * Dice use the platonic solid that matches their face count where one exists.
+ *
+ * Sized larger than the original 0.15: a d20 at that scale was a speck on a phone, and
+ * the rolled value floating over it (see DiceLabels) needs something under it big
+ * enough to look like the thing it is labelling.
+ */
+export function dieGeometry(sides: number, size = 0.22) {
   return memo(`die:${sides}:${size}`, () => {
     switch (sides) {
       case 4: return new THREE.TetrahedronGeometry(size * 1.3);

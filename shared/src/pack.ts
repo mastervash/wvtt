@@ -71,8 +71,13 @@ export interface PackManifest {
   /**
    * Buttons shown to players, each dispatching onAction(table, id) in the script.
    * Without these a script's onAction handlers are unreachable from the UI.
+   *
+   * `target` decides where the button appears. The default, "none", puts it in the
+   * toolbar. "piece" and "stack" put it in the right-click menu instead and hand the
+   * script `{ pieceId }` or `{ stackId }` as the payload — which is how a pack asks a
+   * player to pick a specific card, something a toolbar button cannot express.
    */
-  actions?: { id: string; label: string }[];
+  actions?: { id: string; label: string; target?: 'none' | 'piece' | 'stack' }[];
 }
 
 export interface GamePack {

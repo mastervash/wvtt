@@ -63,6 +63,22 @@ export function canSee(state: TableState, viewer: Viewer, pieceId: string, peeks
   return piece.faceUp;
 }
 
+/** A viewer with no seat and no peeks: stands for "the table at large". */
+const NOBODY: Viewer = { sessionId: '', seat: -1 };
+const NO_PEEKS: PeekGrants = new Map();
+
+/**
+ * Whether a piece's identity is common knowledge.
+ *
+ * The table log is public state, so a line naming a card must only ever name one that
+ * everybody is already entitled to see. Asking canSee() on behalf of a viewer who owns
+ * nothing and has peeked at nothing gives exactly that test, using the same rules as
+ * the wire filter rather than a second copy of them that could drift.
+ */
+export function publiclyKnown(state: TableState, pieceId: string): boolean {
+  return canSee(state, NOBODY, pieceId, NO_PEEKS);
+}
+
 /** The full set of piece ids whose secrets `viewer` may receive. */
 export function visibleTo(state: TableState, viewer: Viewer, peeks: PeekGrants): Set<string> {
   const out = new Set<string>();

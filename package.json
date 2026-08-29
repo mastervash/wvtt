@@ -15,7 +15,7 @@
     "build": "npm run build --workspace=client && npm run build --workspace=server",
     "start": "NODE_ENV=production node server/dist/index.js",
     "typecheck": "tsc -p server/tsconfig.json --noEmit && tsc -p client/tsconfig.json --noEmit",
-    "test": "tsx server/test/hiddenInfo.ts && tsx server/test/scripting.ts && tsx server/test/minimalPack.ts && tsx server/test/chessRules.ts && tsx server/test/enforcement.ts && tsx server/test/eightsRules.ts && tsx server/test/stacking.ts && tsx server/test/clock.ts && tsx server/test/security.ts && tsx server/test/persistence.ts",
+    "test": "tsx server/test/hiddenInfo.ts && tsx server/test/scripting.ts && tsx server/test/minimalPack.ts && tsx server/test/chessRules.ts && tsx server/test/enforcement.ts && tsx server/test/eightsRules.ts && tsx server/test/newPacks.ts && tsx server/test/stacking.ts && tsx server/test/clock.ts && tsx server/test/security.ts && tsx server/test/persistence.ts",
     "test:e2e": "node test/e2e/run.mjs",
     "test:all": "npm run typecheck && npm test && npm run test:e2e && npm run test:prod",
     "test:prod": "node test/e2e/run-production.mjs"

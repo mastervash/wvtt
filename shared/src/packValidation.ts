@@ -9,10 +9,15 @@
  * This validates SHAPE and SIZE. It deliberately does not try to judge whether a
  * script is well-behaved — that is the isolate's job, and trying to detect hostile
  * script by inspection is a losing game.
+ *
+ * It lives in shared so the pack editor can run exactly the same checks before it
+ * offers to load anything. That is a convenience for the author, not a security
+ * boundary: the server validates every pack again on arrival and believes nothing the
+ * client says about it.
  */
 
-import type { PackValidation, GamePack } from '@wvtt/shared';
-import { PACK_FORMAT_VERSION } from '@wvtt/shared';
+import type { PackValidation, GamePack } from './pack.js';
+import { PACK_FORMAT_VERSION } from './pack.js';
 
 const LIMITS = {
   components: 500,
@@ -29,9 +34,21 @@ const LIMITS = {
 /** Accepted image data URIs: raster formats only, deliberately excluding SVG. */
 const RASTER_IMAGE = /^data:image\/(png|jpeg|jpg|webp|gif);base64,[A-Za-z0-9+/=\s]+$/;
 
+/**
+ * Byte length of a string as UTF-8.
+ *
+ * Node's Buffer is not available in a browser, and this module now runs in both. Every
+ * runtime the client supports has TextEncoder, and on the server it is a global too.
+ */
+const encoder = new TextEncoder();
+function byteLength(text: string): number {
+  return encoder.encode(text).length;
+}
+
 const VALID_KINDS = new Set(['card', 'chip', 'die', 'token', 'piece', 'tile', 'note']);
 const VALID_ZONE_VIS = new Set(['public', 'owner', 'hidden', 'inherit']);
 const VALID_LAYOUTS = new Set(['free', 'row', 'fan', 'grid', 'stack']);
+const VALID_ACTION_TARGETS = new Set(['none', 'piece', 'stack']);
 const VALID_ENFORCEMENT = new Set(['off', 'advisory', 'enforced']);
 
 export function validatePack(input: unknown): PackValidation {
@@ -47,7 +64,7 @@ export function validatePack(input: unknown): PackValidation {
   // Reject oversized blobs before doing any deeper work.
   let approxBytes = 0;
   try {
-    approxBytes = Buffer.byteLength(JSON.stringify(input), 'utf8');
+    approxBytes = byteLength(JSON.stringify(input));
   } catch {
     errors.push('Pack contains circular references.');
     return bail();
@@ -90,6 +107,11 @@ export function validatePack(input: unknown): PackValidation {
         if (!a || typeof a !== 'object') return errors.push(`manifest.actions[${i}] is not an object.`);
         if (typeof a.id !== 'string' || !a.id || a.id.length > 64) errors.push(`manifest.actions[${i}].id must be a string of up to 64 characters.`);
         if (typeof a.label !== 'string' || !a.label || a.label.length > 40) errors.push(`manifest.actions[${i}].label must be a string of up to 40 characters.`);
+        // Where the button appears. Caught here rather than ignored, because a typo
+        // would silently drop the button out of the menu the pack expected it in.
+        if (a.target !== undefined && !VALID_ACTION_TARGETS.has(a.target as string)) {
+          errors.push(`manifest.actions[${i}].target must be none, piece or stack.`);
+        }
       });
     }
   }
@@ -117,7 +139,7 @@ export function validatePack(input: unknown): PackValidation {
           // external references; nothing about a playing card needs it.
           if (typeof face.dataUri !== 'string' || !RASTER_IMAGE.test(face.dataUri)) {
             errors.push(`components[${i}] image face must be a PNG, JPEG, WebP or GIF data URI.`);
-          } else if (Buffer.byteLength(face.dataUri, 'utf8') > LIMITS.dataUriBytes) {
+          } else if (byteLength(face.dataUri) > LIMITS.dataUriBytes) {
             errors.push(`components[${i}] image is larger than ${LIMITS.dataUriBytes / 1024} KB.`);
           }
         } else if (face.type === 'text') {
@@ -195,7 +217,7 @@ export function validatePack(input: unknown): PackValidation {
   if (pack.script !== undefined) {
     if (typeof pack.script !== 'string') {
       errors.push('Pack script must be a string.');
-    } else if (Buffer.byteLength(pack.script, 'utf8') > LIMITS.scriptBytes) {
+    } else if (byteLength(pack.script) > LIMITS.scriptBytes) {
       errors.push(`Script is larger than ${LIMITS.scriptBytes / 1024} KB.`);
     }
   }

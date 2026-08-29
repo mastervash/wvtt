@@ -14,7 +14,7 @@ import {
   thicknessOf, zoneAt, pushLog,
 } from './engine.js';
 import { shuffleInPlace, rollDie, makeId } from './rng.js';
-import type { PeekGrants } from './visibility.js';
+import { publiclyKnown, type PeekGrants } from './visibility.js';
 
 export interface OpContext {
   state: TableState;
@@ -23,7 +23,10 @@ export interface OpContext {
   seat: number;
   /** Component metadata, used for things like how many sides a die has. */
   sidesOf: (defId: string) => number;
+  /** Human label for a component, e.g. "Ace of Spades". Used only for public pieces. */
+  labelOf: (defId: string) => string;
   playerName: (sessionId: string) => string;
+  playerColor: (sessionId: string) => string;
 }
 
 export interface OpResult {
@@ -53,6 +56,81 @@ const sane = (n: unknown): n is number =>
 
 function heldByOther(holder: string, sessionId: string): boolean {
   return holder !== '' && holder !== sessionId;
+}
+
+/* ------------------------------------------------------------------ *
+ * Log helpers
+ *
+ * The log is public state. Everything below is written on the assumption that a
+ * spectator with no seat will read it, which is why identities go through
+ * describePiece() rather than being read straight off the secret.
+ * ------------------------------------------------------------------ */
+
+type LogKind = 'move' | 'cards' | 'dice' | 'table' | 'rules' | 'presence';
+
+/** The acting player, formatted for pushLog. */
+function actor(ctx: OpContext, kind: LogKind) {
+  return {
+    name: ctx.playerName(ctx.sessionId),
+    color: ctx.playerColor(ctx.sessionId),
+    kind,
+  };
+}
+
+/** Generic wording for a piece whose identity must not be spelled out. */
+function genericName(kind: string): string {
+  switch (kind) {
+    case 'card': return 'a card';
+    case 'chip': return 'a chip';
+    case 'die': return 'a die';
+    case 'tile': return 'a tile';
+    case 'token': return 'a token';
+    case 'piece': return 'a piece';
+    default: return 'a piece';
+  }
+}
+
+/**
+ * How to name a piece in the log.
+ *
+ * Names the actual component only when its identity is already common knowledge; a
+ * face-down card is always "a card", even to the player moving it. Writing the real
+ * name here would leak the deck to everyone reading the log.
+ */
+function describePiece(ctx: OpContext, piece: Piece): string {
+  if (!publiclyKnown(ctx.state, piece.id)) return genericName(piece.kind);
+  const label = ctx.labelOf(piece.defId);
+  return label ? `the ${label}` : genericName(piece.kind);
+}
+
+/** How to name a pile: its player-given name if it has one, else its size. */
+function describeStack(stack: Stack): string {
+  const n = stack.pieceIds?.length ?? 0;
+  if (stack.label) return `“${stack.label}”`;
+  return `a pile of ${n}`;
+}
+
+/** Where something ended up, for a move line. Zones have names; open table does not. */
+function describePlace(state: TableState, zoneId: string): string {
+  if (!zoneId) return 'the table';
+  const zone = state.zones.get(zoneId);
+  return zone ? (zone.label || zone.id) : 'the table';
+}
+
+/**
+ * Whether a piece or pile is pinned down.
+ *
+ * Locking is deliberately enforced at the op layer rather than hidden in the client,
+ * so a lock holds against every client, including a modified one.
+ */
+function lockedTarget(state: TableState, t: Target): boolean {
+  if (t.kind === 'stack') return (t.obj as Stack).locked;
+  const piece = t.obj as Piece;
+  if (piece.locked) return true;
+  // A card inside a locked pile inherits the pile's lock; otherwise a player could
+  // peel the top card off a pinned deck one card at a time.
+  if (piece.stackId) return !!state.stacks.get(piece.stackId)?.locked;
+  return false;
 }
 
 export function applyOp(ctx: OpContext, op: Op): OpResult {
@@ -113,7 +191,7 @@ export function applyOp(ctx: OpContext, op: Op): OpResult {
       });
       if (taken) return fail('seat taken');
       player.seat = seat;
-      pushLog(state, `${player.name} sat in seat ${seat + 1}.`);
+      pushLog(state, `sat down in seat ${seat + 1}.`, actor(ctx, 'presence'));
       // Changing seat changes which private hand zones you can read.
       return OK_VIS;
     }
@@ -121,7 +199,9 @@ export function applyOp(ctx: OpContext, op: Op): OpResult {
     case 'stand': {
       const player = state.players.get(sessionId);
       if (!player) return fail('no player');
+      const was = player.seat;
       player.seat = -1;
+      if (was >= 0) pushLog(state, `stood up from seat ${was + 1}.`, actor(ctx, 'presence'));
       return OK_VIS;
     }
 
@@ -130,6 +210,7 @@ export function applyOp(ctx: OpContext, op: Op): OpResult {
     case 'grab': {
       const t = resolve(state, op.target);
       if (!t) return fail('no target');
+      if (lockedTarget(state, t)) return fail('that is locked in place');
       if (heldByOther(t.obj.heldBy, sessionId)) return fail('held by another player');
       t.obj.heldBy = sessionId;
       return OK;
@@ -146,6 +227,7 @@ export function applyOp(ctx: OpContext, op: Op): OpResult {
       if (!sane(op.x) || !sane(op.z)) return fail('bad coords');
       const t = resolve(state, op.target);
       if (!t) return fail('no target');
+      if (lockedTarget(state, t)) return fail('that is locked in place');
       if (heldByOther(t.obj.heldBy, sessionId)) return fail('held by another player');
       t.obj.x = op.x;
       t.obj.z = op.z;
@@ -154,10 +236,24 @@ export function applyOp(ctx: OpContext, op: Op): OpResult {
       return OK;
     }
 
+    case 'rotate': {
+      const t = resolve(state, op.target);
+      if (!t) return fail('no target');
+      if (lockedTarget(state, t)) return fail('that is locked in place');
+      if (heldByOther(t.obj.heldBy, sessionId)) return fail('held by another player');
+      const delta = Number(op.delta);
+      if (!Number.isFinite(delta)) return fail('bad angle');
+      // Kept in [0, 2pi) so the value never drifts off after a few hundred turns.
+      const TAU = Math.PI * 2;
+      t.obj.rotY = ((t.obj.rotY + delta) % TAU + TAU) % TAU;
+      return OK;
+    }
+
     case 'drop': {
       if (!sane(op.x) || !sane(op.z)) return fail('bad coords');
       const t = resolve(state, op.target);
       if (!t) return fail('no target');
+      if (lockedTarget(state, t)) return fail('that is locked in place');
       if (heldByOther(t.obj.heldBy, sessionId)) return fail('held by another player');
 
       const prevZone = t.obj.zoneId;
@@ -192,6 +288,20 @@ export function applyOp(ctx: OpContext, op: Op): OpResult {
 
       if (zone) relayoutZone(state, zone.id);
       if (prevZone && prevZone !== zone?.id) relayoutZone(state, prevZone);
+
+      // Only a landing that changes which region of the table something is in is worth
+      // a line. Nudging a card around inside the same zone is not news, and logging it
+      // would drown everything that is.
+      if ((zone?.id ?? '') !== prevZone) {
+        const what = t.kind === 'stack'
+          ? describeStack(t.obj as Stack)
+          : describePiece(ctx, t.obj as Piece);
+        pushLog(
+          state,
+          `moved ${what} to ${describePlace(state, zone?.id ?? '')}.`,
+          actor(ctx, 'move'),
+        );
+      }
       return OK_VIS;
     }
 
@@ -200,9 +310,18 @@ export function applyOp(ctx: OpContext, op: Op): OpResult {
     case 'flip': {
       const t = resolve(state, op.target);
       if (!t) return fail('no target');
+      if (lockedTarget(state, t)) return fail('that is locked in place');
       if (t.kind === 'piece') {
         const piece = t.obj as Piece;
         piece.faceUp = !piece.faceUp;
+        // Read the name AFTER the flip: turning a card face up makes it public, and
+        // that is exactly the moment the log is allowed to say what it is.
+        const what = describePiece(ctx, piece);
+        pushLog(
+          state,
+          piece.faceUp ? `turned ${what} face up.` : `turned ${what} face down.`,
+          actor(ctx, 'cards'),
+        );
       } else {
         // Flipping a stack turns the whole pile over: every piece flips AND the
         // order reverses, exactly like turning a real deck upside down.
@@ -214,6 +333,11 @@ export function applyOp(ctx: OpContext, op: Op): OpResult {
           if (p) p.faceUp = !p.faceUp;
         });
         restackYs(state, stack.id);
+        pushLog(
+          state,
+          `turned ${describeStack(stack)} over (${stack.pieceIds.length} cards).`,
+          actor(ctx, 'cards'),
+        );
       }
       return OK_VIS;
     }
@@ -221,27 +345,40 @@ export function applyOp(ctx: OpContext, op: Op): OpResult {
     case 'shuffle': {
       const stack = state.stacks.get(op.stackId);
       if (!stack) return fail('no stack');
+      if (stack.locked) return fail('that pile is locked');
       if (heldByOther(stack.heldBy, sessionId)) return fail('held by another player');
       const ids = shuffleInPlace([...stack.pieceIds]);
       replaceIds(stack.pieceIds, ids);
       // Shuffling revokes every peek on those cards — nobody remembers a shuffled deck.
       for (const pid of ids) ctx.peeks.delete(pid);
       restackYs(state, stack.id);
-      pushLog(state, `${ctx.playerName(sessionId)} shuffled ${ids.length} cards.`);
+      pushLog(state, `shuffled ${describeStack(stack)} (${ids.length} cards).`, actor(ctx, 'cards'));
       return OK_VIS;
     }
 
     case 'draw': {
       const stack = state.stacks.get(op.stackId);
       if (!stack) return fail('no stack');
+      if (stack.locked) return fail('that pile is locked');
       const zone = state.zones.get(op.toZoneId);
       if (!zone) return fail('no zone');
       if (zone.ownerSeat >= 0 && zone.ownerSeat !== ctx.seat) return fail('not your zone');
-      const piece = takeTop(state, stack);
-      if (!piece) return fail('stack empty');
-      moveIntoZone(state, piece, zone.id);
+      // Drawing several at once is the same op repeated; the cap matches `deal`.
+      const want = Math.max(1, Math.min(20, Math.floor(Number(op.count) || 1)));
+      let drawn = 0;
+      for (let i = 0; i < want; i++) {
+        const piece = takeTop(state, stack);
+        if (!piece) break;
+        moveIntoZone(state, piece, zone.id);
+        drawn++;
+      }
+      if (drawn === 0) return fail('stack empty');
       relayoutZone(state, zone.id);
-      pushLog(state, `${ctx.playerName(sessionId)} drew a card.`);
+      pushLog(
+        state,
+        `drew ${drawn} card${drawn === 1 ? '' : 's'} from ${describeStack(stack)} into ${describePlace(state, zone.id)}.`,
+        actor(ctx, 'cards'),
+      );
       return OK_VIS;
     }
 
@@ -263,7 +400,14 @@ export function applyOp(ctx: OpContext, op: Op): OpResult {
         }
       }
       for (const zid of zoneIds) relayoutZone(state, zid);
-      pushLog(state, `${ctx.playerName(sessionId)} dealt ${dealt} card${dealt === 1 ? '' : 's'}.`);
+      const where = zoneIds.length === 1
+        ? describePlace(state, zoneIds[0])
+        : `${zoneIds.length} hands`;
+      pushLog(
+        state,
+        `dealt ${dealt} card${dealt === 1 ? '' : 's'} to ${where}.`,
+        actor(ctx, 'cards'),
+      );
       return OK_VIS;
     }
 
@@ -272,6 +416,7 @@ export function applyOp(ctx: OpContext, op: Op): OpResult {
       const src = resolve(state, op.target);
       const dst = resolve(state, op.ontoId);
       if (!src || !dst) return fail('no target');
+      if (lockedTarget(state, src) || lockedTarget(state, dst)) return fail('that is locked in place');
       if (heldByOther(dst.obj.heldBy, sessionId)) return fail('held by another player');
 
       const moving = src.kind === 'stack'
@@ -290,14 +435,21 @@ export function applyOp(ctx: OpContext, op: Op): OpResult {
         detachFromStack(state, base);
         makeStack(state, [base, ...moving], base.x, base.z, base.zoneId);
       }
+      pushLog(
+        state,
+        `put ${moving.length} ${moving.length === 1 ? 'piece' : 'pieces'} onto a pile.`,
+        actor(ctx, 'cards'),
+      );
       return OK_VIS;
     }
 
     case 'unstack': {
       const stack = state.stacks.get(op.stackId);
       if (!stack) return fail('no stack');
+      if (stack.locked) return fail('that pile is locked');
       if (!sane(op.x) || !sane(op.z)) return fail('bad coords');
       const count = Math.max(1, Math.min(stack.pieceIds.length, Math.floor(Number(op.count) || 1)));
+      const from = describeStack(stack);
       const taken: Piece[] = [];
       for (let i = 0; i < count; i++) {
         const p = takeTop(state, stack);
@@ -311,14 +463,62 @@ export function applyOp(ctx: OpContext, op: Op): OpResult {
       } else {
         makeStack(state, taken, op.x, op.z, zone?.id ?? '');
       }
+      // A single card peeled off during a drag is the commonest gesture on the table;
+      // logging every one of those buries everything else, so only splits are recorded.
+      if (taken.length > 1) {
+        pushLog(state, `took ${taken.length} cards off ${from}.`, actor(ctx, 'cards'));
+      }
       return OK_VIS;
+    }
+
+    /* ---------------- naming and locking ---------------- */
+
+    case 'setStackTag': {
+      const stack = state.stacks.get(op.stackId);
+      if (!stack) return fail('no stack');
+      // Same treatment as chat: this is untrusted text every client will render.
+      const clean = (v: unknown, max: number) => String(v ?? '')
+        .replace(/[\u0000-\u001f\u007f]/g, ' ')
+        .trim()
+        .slice(0, max);
+      if (op.label !== undefined) stack.label = clean(op.label, 32);
+      if (op.tag !== undefined) stack.tag = clean(op.tag, 24);
+      pushLog(
+        state,
+        stack.label ? `named a pile “${stack.label}”.` : 'cleared a pile’s name.',
+        actor(ctx, 'table'),
+      );
+      return OK;
+    }
+
+    case 'setLock': {
+      const t = resolve(state, op.target);
+      if (!t) return fail('no target');
+      const locked = Boolean(op.locked);
+      if (t.kind === 'stack') (t.obj as Stack).locked = locked;
+      else (t.obj as Piece).locked = locked;
+      // Locking something someone is holding would strand it in mid-air.
+      if (locked) t.obj.heldBy = '';
+      const what = t.kind === 'stack'
+        ? describeStack(t.obj as Stack)
+        : describePiece(ctx, t.obj as Piece);
+      pushLog(
+        state,
+        locked ? `locked ${what} in place.` : `unlocked ${what}.`,
+        actor(ctx, 'table'),
+      );
+      return OK;
     }
 
     /* ---------------- information ---------------- */
 
     case 'setAutoStack': {
       state.autoStack = Boolean(op.on);
-      pushLog(state, `${ctx.playerName(sessionId)} turned ${state.autoStack ? 'on' : 'off'} snapping into piles.`);
+      pushLog(
+        state,
+        `turned ${state.autoStack ? 'on' : 'off'} snapping into piles.`,
+        actor(ctx, 'table'),
+      );
       return OK;
     }
 
@@ -334,7 +534,7 @@ export function applyOp(ctx: OpContext, op: Op): OpResult {
       let set = ctx.peeks.get(piece.id);
       if (!set) { set = new Set(); ctx.peeks.set(piece.id, set); }
       set.add(sessionId);
-      pushLog(state, `${ctx.playerName(sessionId)} peeked at a card.`);
+      pushLog(state, 'peeked at a card.', actor(ctx, 'cards'));
       return OK_VIS;
     }
 
@@ -367,7 +567,11 @@ export function applyOp(ctx: OpContext, op: Op): OpResult {
         piece.zoneId = '';
         piece.z = piece.z - 1.2;
       }
-      pushLog(state, `${ctx.playerName(sessionId)} played a card.`);
+      pushLog(
+        state,
+        `played ${describePiece(ctx, piece)} to ${describePlace(state, piece.zoneId)}.`,
+        actor(ctx, 'cards'),
+      );
       return OK_VIS;
     }
 
@@ -375,12 +579,13 @@ export function applyOp(ctx: OpContext, op: Op): OpResult {
       const piece = state.pieces.get(op.target);
       if (!piece) return fail('no piece');
       if (piece.kind !== 'die') return fail('not a die');
+      if (piece.locked) return fail('that die is locked in place');
       const sides = ctx.sidesOf(piece.defId);
       const value = rollDie(sides);
       piece.secret.value = value;
       piece.faceUp = true;
       piece.rotY = Math.random() * Math.PI * 2;
-      pushLog(state, `${ctx.playerName(sessionId)} rolled d${sides}: ${value}`);
+      pushLog(state, `rolled a d${sides} and got ${value}.`, actor(ctx, 'dice'));
       return OK_VIS;
     }
 

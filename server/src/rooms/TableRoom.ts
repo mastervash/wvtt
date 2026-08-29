@@ -8,7 +8,7 @@
 import { Room, Client } from '@colyseus/core';
 import { StateView } from '@colyseus/schema';
 import type { GamePack, Op, Enforcement } from '@wvtt/shared';
-import { getBuiltinPack, DEFAULT_PACK_ID, TOKEN_COLORS } from '@wvtt/shared';
+import { getBuiltinPack, validatePack, DEFAULT_PACK_ID, TOKEN_COLORS } from '@wvtt/shared';
 import { TableState, Piece, Stack, Secret, Player } from '../state.js';
 import { applySeatSetup, buildTable, pushLog, relayoutZone, restackYs } from '../engine.js';
 import { applyOp, type OpContext } from '../ops.js';
@@ -20,9 +20,12 @@ import {
   CLOCK_TICK_MS, configureClock, disableClock, pauseClock, resetClock,
   startClock, switchClock, syncSeats, tickClock,
 } from '../clock.js';
-import { validatePack } from '../packValidation.js';
+
 import { ScriptHost } from '../scripting/host.js';
 import { buildScriptApi } from '../scripting/api.js';
+
+/** Why a pack's onSetup is running. See loadPack(). */
+type SetupReason = 'load' | 'reset';
 
 interface JoinOptions {
   name?: string;
@@ -38,6 +41,7 @@ export class TableRoom extends Room<TableState> {
   /** Last set of piece ids we granted to each client, so we only send the delta. */
   private granted = new Map<string, Set<string>>();
   private sidesCache = new Map<string, number>();
+  private labelCache = new Map<string, string>();
   /** The pack's rules script, when it has one and enforcement is not off. */
   private script: ScriptHost | null = null;
   private scriptVars = new Map<string, unknown>();
@@ -119,7 +123,7 @@ export class TableRoom extends Room<TableState> {
     // spades. What stays secret is WHICH piece is the ace, which lives in Piece.secret.
     client.send('pack', this.pack);
 
-    pushLog(this.state, `${player.name} joined.`);
+    pushLog(this.state, 'joined the table.', { name: player.name, color: player.color, kind: 'presence' });
     this.refreshViews();
   }
 
@@ -159,7 +163,7 @@ export class TableRoom extends Room<TableState> {
         id: p.id, kind: p.kind, defId: p.defId,
         x: p.x, y: p.y, z: p.z, rotY: p.rotY,
         faceUp: p.faceUp, stackId: p.stackId, order: p.order, zoneId: p.zoneId,
-        face: p.secret.face, value: p.secret.value,
+        face: p.secret.face, value: p.secret.value, locked: p.locked,
       });
     });
     const stacks: RoomSnapshot['stacks'] = [];
@@ -167,6 +171,7 @@ export class TableRoom extends Room<TableState> {
       stacks.push({
         id: st.id, x: st.x, y: st.y, z: st.z, rotY: st.rotY,
         zoneId: st.zoneId, pieceIds: [...st.pieceIds],
+        label: st.label, tag: st.tag, locked: st.locked,
       });
     });
 
@@ -202,6 +207,7 @@ export class TableRoom extends Room<TableState> {
       piece.x = p.x; piece.y = p.y; piece.z = p.z; piece.rotY = p.rotY;
       piece.faceUp = p.faceUp; piece.stackId = p.stackId; piece.order = p.order;
       piece.zoneId = p.zoneId;
+      piece.locked = !!p.locked;
       piece.heldBy = '';        // nobody is holding anything after a restart
       const secret = new Secret();
       secret.face = p.face; secret.value = p.value;
@@ -213,6 +219,7 @@ export class TableRoom extends Room<TableState> {
       const stack = new Stack();
       stack.id = st.id; stack.x = st.x; stack.y = st.y; stack.z = st.z; stack.rotY = st.rotY;
       stack.zoneId = st.zoneId; stack.heldBy = '';
+      stack.label = st.label ?? ''; stack.tag = st.tag ?? ''; stack.locked = !!st.locked;
       for (const id of st.pieceIds) if (this.state.pieces.has(id)) stack.pieceIds.push(id);
       this.state.stacks.set(stack.id, stack);
     }
@@ -223,12 +230,14 @@ export class TableRoom extends Room<TableState> {
     this.scriptVars.clear();
     for (const [k, v] of snapshot.scriptVars) this.scriptVars.set(k, v);
 
-    pushLog(this.state, 'Table restored. Take a seat to carry on.');
+    pushLog(this.state, 'Table restored. Take a seat to carry on.', { kind: 'table' });
   }
 
   private removePlayer(sessionId: string) {
     const player = this.state.players.get(sessionId);
-    if (player) pushLog(this.state, `${player.name} left.`);
+    if (player) {
+      pushLog(this.state, 'left the table.', { name: player.name, color: player.color, kind: 'presence' });
+    }
     this.state.players.delete(sessionId);
     this.granted.delete(sessionId);
     this.limits.delete(sessionId);
@@ -252,11 +261,14 @@ export class TableRoom extends Room<TableState> {
     const limits = this.limits.get(client.sessionId);
     if (limits) {
       const heavy = op.t === 'resetTable' || op.t === 'loadPack';
-      const budget = heavy ? limits.heavy : op.t === 'chat' ? limits.chat : limits.ops;
+      const budget = heavy ? limits.heavy
+        : op.t === 'chat' ? limits.chat
+        : op.t === 'ping' ? limits.ping
+        : limits.ops;
       if (!take(budget)) {
         // Ordinary ops are dropped in silence — telling a flooding client about every
         // rejected message would just double the traffic.
-        if (heavy || op.t === 'chat') {
+        if (heavy || op.t === 'chat' || op.t === 'ping') {
           client.send('opError', { op: op.t, error: 'Slow down a moment.' });
         }
         return;
@@ -270,7 +282,7 @@ export class TableRoom extends Room<TableState> {
       if (mode === 'off' || mode === 'advisory' || mode === 'enforced') {
         const wasOff = this.state.enforcement === 'off';
         this.state.enforcement = mode;
-        pushLog(this.state, `${player.name} set rules to ${mode}.`);
+        pushLog(this.state, `set rules to ${mode}.`, logActor(player, 'rules'));
         // Turning rules on starts the script; turning them off shuts it down entirely
         // rather than leaving an isolate running with nothing to do.
         if (mode === 'off') this.disposeScript();
@@ -281,7 +293,11 @@ export class TableRoom extends Room<TableState> {
     if (op.t === 'clockConfig') {
       const mode = op.mode === 'manual' ? 'manual' : 'auto';
       configureClock(this.state, op.baseMs, op.incrementMs, mode, this.pack?.manifest.minSeats ?? 2);
-      pushLog(this.state, `${player.name} set a ${Math.round(this.state.clock.baseMs / 60000)} minute clock (${mode}).`);
+      pushLog(
+        this.state,
+        `set a ${Math.round(this.state.clock.baseMs / 60000)} minute clock (${mode}).`,
+        logActor(player, 'table'),
+      );
       return;
     }
     if (op.t === 'clockStart') { startClock(this.state); return; }
@@ -289,7 +305,7 @@ export class TableRoom extends Room<TableState> {
     if (op.t === 'clockReset') { resetClock(this.state); return; }
     if (op.t === 'clockOff') {
       disableClock(this.state);
-      pushLog(this.state, `${player.name} removed the clock.`);
+      pushLog(this.state, 'removed the clock.', logActor(player, 'table'));
       return;
     }
     if (op.t === 'clockPress') {
@@ -303,9 +319,30 @@ export class TableRoom extends Room<TableState> {
       return;
     }
 
+    /**
+     * A ping is an event, not a fact about the table, so it is broadcast rather than
+     * written into state: it should flash on every screen and then be gone, and
+     * putting it in state would mean deciding when to take it out again.
+     */
+    if (op.t === 'ping') {
+      const x = Number(op.x);
+      const z = Number(op.z);
+      if (!Number.isFinite(x) || !Number.isFinite(z) || Math.abs(x) > 40 || Math.abs(z) > 40) return;
+      const targetId = typeof op.target === 'string' ? op.target : '';
+      this.broadcast('ping', {
+        sessionId: client.sessionId,
+        name: player.name,
+        color: player.color,
+        x, z,
+        targetId,
+      });
+      pushLog(this.state, 'pinged the table.', logActor(player, 'presence'));
+      return;
+    }
+
     if (op.t === 'resetTable') {
-      void this.loadPack(this.pack, true);
-      pushLog(this.state, `${player.name} reset the table.`);
+      void this.loadPack(this.pack, true, 'reset');
+      pushLog(this.state, 'reset the table.', logActor(player, 'table'));
       this.refreshViews();
       return;
     }
@@ -319,7 +356,9 @@ export class TableRoom extends Room<TableState> {
       sessionId: client.sessionId,
       seat: player.seat,
       sidesOf: (defId) => this.sidesOf(defId),
+      labelOf: (defId) => this.labelOf(defId),
       playerName: (sid) => this.state.players.get(sid)?.name ?? 'Someone',
+      playerColor: (sid) => this.state.players.get(sid)?.color ?? '',
     };
 
     if (op.t === 'scriptAction') {
@@ -381,7 +420,7 @@ export class TableRoom extends Room<TableState> {
     if (this.script && this.state.enforcement === 'advisory' && MOVE_OPS.has(op.t)) {
       const verdict = this.script.call('validateMove', [{ ...op, seat: player.seat, name: player.name }]);
       const note = verdict.rejection ?? (verdict.value === false ? 'That move breaks the rules.' : null);
-      if (note) pushLog(this.state, `Note: ${note}`);
+      if (note) pushLog(this.state, `Note: ${note}`, { kind: 'rules' });
     }
 
     if (result.visibilityDirty || this.takeScriptDirty()) this.refreshViews();
@@ -441,23 +480,44 @@ export class TableRoom extends Room<TableState> {
 
   /* ---------------- pack loading ---------------- */
 
-  private async loadPack(pack: GamePack, announce: boolean) {
+  /**
+   * Build the table from a pack and start its script.
+   *
+   * `reason` is passed through to the script's onSetup. A pack that deals a hand in
+   * onSetup needs to tell the two cases apart: loading the game should lay it out
+   * ready to play, while "Reset table" means the player wants the table CLEARED. Before
+   * this, reset immediately re-dealt and looked to players like a button that did
+   * nothing at all.
+   */
+  private async loadPack(pack: GamePack, announce: boolean, reason: SetupReason = 'load') {
     this.pack = pack;
     this.state.status = '';
     this.peeks.clear();
     this.sidesCache.clear();
+    this.labelCache.clear();
     for (const c of pack.components) {
       if (c.sides) this.sidesCache.set(c.id, c.sides);
+      if (c.label) this.labelCache.set(c.id, c.label);
     }
     const seats: number[] = [];
     this.state.players.forEach((p) => { if (p.seat >= 0) seats.push(p.seat); });
     buildTable(this.state, pack, seats);
     if (announce) this.setMetadata({ roomCode: this.state.roomCode, packName: this.state.packName });
-    await this.startScript();
+    await this.startScript(reason);
   }
 
   private sidesOf(defId: string): number {
     return this.sidesCache.get(defId) ?? 6;
+  }
+
+  /**
+   * A component's display name, for the table log.
+   *
+   * Safe to expose: what a pack contains is public knowledge. Which piece is which is
+   * not, and that is decided by describePiece() in ops.ts before this is ever called.
+   */
+  private labelOf(defId: string): string {
+    return this.labelCache.get(defId) ?? '';
   }
 
   private firstFreeSeat(): number {
@@ -531,7 +591,7 @@ export class TableRoom extends Room<TableState> {
    * Failure is deliberately soft: a pack with a broken script still gives everyone a
    * working sandbox table, with the error reported rather than the room refusing to open.
    */
-  private async startScript() {
+  private async startScript(reason: SetupReason = 'load') {
     this.disposeScript();
     const source = this.pack?.script;
     if (!source || this.state.enforcement === 'off') return;
@@ -551,7 +611,7 @@ export class TableRoom extends Room<TableState> {
     }
     this.script = host;
 
-    const setup = host.call('onSetup', []);
+    const setup = host.call('onSetup', [reason]);
     if (!setup.ok) pushLog(this.state, `Rules script error during setup: ${setup.error}`);
     if (this.takeScriptDirty()) this.refreshViews();
   }
@@ -573,10 +633,25 @@ export class TableRoom extends Room<TableState> {
       return;
     }
     const name = String(action ?? '').slice(0, 64);
-    const result = this.script.call('onAction', [name, payload ?? null]);
+    const player = this.state.players.get(client.sessionId);
+
+    /**
+     * Who pressed the button travels with the payload.
+     *
+     * A script cannot ask "who is calling me?" any other way, and most rules need it:
+     * a card game has to know whose turn it is, and a judge-and-submit game has to
+     * know whether the presser is the judge. The client's own fields are kept, but
+     * seat and name are stamped over the top — a client cannot claim another seat.
+     */
+    const base = payload && typeof payload === 'object' && !Array.isArray(payload)
+      ? payload as Record<string, unknown>
+      : {};
+    const enriched = { ...base, seat: player?.seat ?? -1, name: player?.name ?? '' };
+
+    const result = this.script.call('onAction', [name, enriched]);
     if (!result.ok) {
       client.send('opError', { op: 'scriptAction', error: result.error });
-      pushLog(this.state, `Rules script error in "${name}": ${result.error}`);
+      pushLog(this.state, `Rules script error in "${name}": ${result.error}`, { kind: 'rules' });
       return;
     }
     if (result.rejection) client.send('opError', { op: 'scriptAction', error: result.rejection });
@@ -625,6 +700,11 @@ export class TableRoom extends Room<TableState> {
  * 'drop' is the commit point, and that is what gets judged.
  */
 const MOVE_OPS = new Set<string>(['drop', 'flip', 'draw', 'deal', 'stackOnto', 'unstack', 'reveal', 'roll', 'shuffle']);
+
+/** Format a player as a log actor, so every line the room writes is attributable. */
+function logActor(player: Player, kind: 'move' | 'cards' | 'dice' | 'table' | 'rules' | 'presence') {
+  return { name: player.name, color: player.color, kind };
+}
 
 /** The piece or pile an op acts on, for putting it back when the op is refused. */
 function targetOf(op: Op): string | null {

@@ -12,7 +12,7 @@ import { Server } from '@colyseus/core';
 import { WebSocketTransport } from '@colyseus/ws-transport';
 import { Client } from 'colyseus.js';
 import { TableRoom } from '../src/rooms/TableRoom.js';
-import { validatePack } from '../src/packValidation.js';
+import { validatePack } from '@wvtt/shared';
 import { loadRoom, saveRoom } from '../src/persistence.js';
 import { chessPack, sandboxPack, type GamePack } from '@wvtt/shared';
 

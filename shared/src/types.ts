@@ -78,6 +78,8 @@ export interface PieceState {
   zoneId: string | null;
   /** Session id of the player currently dragging it, or null. */
   heldBy: string | null;
+  /** Pinned in place: refuses to be moved, flipped or taken until unlocked. */
+  locked?: boolean;
 }
 
 export interface StackState {
@@ -88,6 +90,11 @@ export interface StackState {
   /** Piece ids, bottom first. */
   pieceIds: string[];
   heldBy: string | null;
+  /** Player-given name, e.g. "Draw pile" or "Alice's stash". Empty when unnamed. */
+  label?: string;
+  /** Free-form group tag. Piles sharing a tag are drawn with the same colour. */
+  tag?: string;
+  locked?: boolean;
 }
 
 export type Enforcement = 'off' | 'advisory' | 'enforced';
@@ -107,9 +114,20 @@ export type Op =
   | { t: 'drop'; target: string; zoneId: string | null; x: number; z: number }
   | { t: 'shuffle'; stackId: string }
   | { t: 'deal'; stackId: string; count: number; toZoneIds: string[] }
-  | { t: 'draw'; stackId: string; toZoneId: string }
+  | { t: 'draw'; stackId: string; toZoneId: string; count?: number }
   | { t: 'stackOnto'; target: string; ontoId: string }
   | { t: 'unstack'; stackId: string; count: number; x: number; z: number }
+  /** Turn a piece or pile on the spot, in radians. */
+  | { t: 'rotate'; target: string; delta: number }
+  /** Name and colour-tag a pile so a table with six decks on it stays legible. */
+  | { t: 'setStackTag'; stackId: string; label?: string; tag?: string }
+  /** Pin a piece or pile down so nobody can drag, shuffle or draw from it. */
+  | { t: 'setLock'; target: string; locked: boolean }
+  /**
+   * Draw everyone's eye to a spot on the table. Transient: broadcast to clients as a
+   * message rather than kept in state, because a ping is an event, not a fact.
+   */
+  | { t: 'ping'; x: number; z: number; target?: string }
   | { t: 'peek'; target: string }
   | { t: 'unpeek'; target: string }
   | { t: 'reveal'; target: string }

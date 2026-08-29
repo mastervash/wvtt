@@ -236,14 +236,26 @@ function drawBlank(color: string): HTMLCanvasElement {
   return c;
 }
 
+/**
+ * The body of an unrolled die.
+ *
+ * Deliberately plain. Text painted here is stretched across every face of a
+ * polyhedron by the UV mapping, so it can never be read reliably; the die's value is
+ * shown on a billboard above it instead. What this needs to do is look like a die and
+ * stay distinguishable at a glance, which a tinted body with a subtle edge does.
+ */
+const DIE_TINTS: Record<number, string> = {
+  4: '#e9dcc0', 6: '#f2efe6', 8: '#d8e3ef', 10: '#e7dcef',
+  12: '#dcefe1', 20: '#efdcdc', 100: '#e2e2ea',
+};
+
 function drawDieFace(sides: number): HTMLCanvasElement {
   const [c, ctx] = canvas(128, 128);
-  ctx.fillStyle = '#f2efe6';
+  ctx.fillStyle = DIE_TINTS[sides] ?? '#f2efe6';
   ctx.fillRect(0, 0, 128, 128);
-  ctx.fillStyle = '#16161a';
-  ctx.textAlign = 'center';
-  ctx.font = 'bold 44px Helvetica, Arial, sans-serif';
-  ctx.fillText(`d${sides}`, 64, 80);
+  ctx.strokeStyle = 'rgba(0,0,0,0.35)';
+  ctx.lineWidth = 8;
+  ctx.strokeRect(0, 0, 128, 128);
   return c;
 }
 
@@ -354,19 +366,3 @@ export function checkerTexture(cols: number, rows: number, light = '#d8c9a8', da
   return tex;
 }
 
-/** Number written on the top of a die after it is rolled. */
-export function dieValueTexture(value: number): THREE.Texture {
-  const key = `__die${value}`;
-  const hit = cache.get(key);
-  if (hit) return hit;
-  const [c, ctx] = canvas(128, 128);
-  ctx.fillStyle = '#f2efe6';
-  ctx.fillRect(0, 0, 128, 128);
-  ctx.fillStyle = '#16161a';
-  ctx.textAlign = 'center';
-  ctx.font = 'bold 72px Helvetica, Arial, sans-serif';
-  ctx.fillText(String(value), 64, 92);
-  const tex = finish(c);
-  cache.set(key, tex);
-  return tex;
-}

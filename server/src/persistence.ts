@@ -21,11 +21,15 @@ export interface PieceSnapshot {
   x: number; y: number; z: number; rotY: number;
   faceUp: boolean; stackId: string; order: number; zoneId: string;
   face: string; value: number;
+  /** Optional so snapshots written before locking existed still load. */
+  locked?: boolean;
 }
 
 export interface StackSnapshot {
   id: string; x: number; y: number; z: number; rotY: number;
   zoneId: string; pieceIds: string[];
+  /** Optional so snapshots written before pile names existed still load. */
+  label?: string; tag?: string; locked?: boolean;
 }
 
 export interface RoomSnapshot {
@@ -57,8 +61,18 @@ const DATA_DIR = process.env.DATA_DIR
   ?? path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../data');
 const ROOM_DIR = path.join(DATA_DIR, 'rooms');
 
-/** Snapshots older than this are swept up on startup. */
-export const MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
+/**
+ * How long a table is kept after everyone has left.
+ *
+ * The room object itself is disposed as soon as it is empty — holding hundreds of idle
+ * rooms in memory to serve the few people who come back would be the wrong trade. What
+ * survives is this snapshot, and rejoining with the room code rebuilds the table from
+ * it, cards where they were left. A week is generous on purpose: players ask to come
+ * back "tomorrow", and the cost of a stale table is one small JSON file.
+ *
+ * Override with ROOM_TTL_HOURS.
+ */
+export const MAX_AGE_MS = Math.max(1, Number(process.env.ROOM_TTL_HOURS) || 24 * 7) * 60 * 60 * 1000;
 
 function ensureDir(): void {
   // 0700: snapshots contain every card's identity, including face-down ones. Anyone
@@ -111,7 +125,12 @@ export function forgetRoom(roomCode: string): void {
   try { unlinkSync(file); } catch { /* already gone */ }
 }
 
-/** Delete snapshots nobody has touched in a week. Called once at startup. */
+/**
+ * Delete snapshots past their keep-time.
+ *
+ * Called at startup and then periodically: a server that runs for weeks would otherwise
+ * never sweep, and the directory grows one file per table forever.
+ */
 export function pruneOldRooms(): number {
   let removed = 0;
   try {

@@ -12,7 +12,7 @@
 
 import * as THREE from 'three';
 import type { ComponentDef } from '@wvtt/shared';
-import { faceTexture, defaultBackTexture, dieValueTexture } from './faces';
+import { faceTexture, defaultBackTexture } from './faces';
 
 const cache = new Map<string, THREE.Material | THREE.Material[]>();
 
@@ -35,11 +35,10 @@ export interface PieceLook {
   faceUp: boolean;
   /** Present only when this client was told the piece's identity. */
   known: boolean;
-  dieValue: number | undefined;
 }
 
 export function materialsFor(look: PieceLook): THREE.Material | THREE.Material[] {
-  const { def, kind, faceUp, known, dieValue } = look;
+  const { def, kind, faceUp, known } = look;
   const defId = def?.id ?? `anon:${kind}`;
 
   if (kind === 'card' || kind === 'tile') {
@@ -63,9 +62,16 @@ export function materialsFor(look: PieceLook): THREE.Material | THREE.Material[]
   }
 
   if (kind === 'die') {
-    return memo(`${defId}:die:${dieValue ?? 'blank'}`, () => {
-      const tex = dieValue ? dieValueTexture(dieValue) : (def ? faceTexture(`${def.id}:front`, def.front) : null);
-      return new THREE.MeshStandardMaterial({ map: tex ?? undefined, color: '#ffffff', roughness: 0.4 });
+    // The value is NOT painted on the mesh. A polyhedron's UVs stretch one texture
+    // across every face, so a number drawn here appears sheared and repeated and
+    // cannot be read from any angle. The die shows a body; DiceLabels shows the roll.
+    return memo(`${defId}:die`, () => {
+      const tex = def ? faceTexture(`${def.id}:front`, def.front) : null;
+      return new THREE.MeshStandardMaterial({
+        map: tex ?? undefined,
+        color: tex ? '#ffffff' : '#f2efe6',
+        roughness: 0.35,
+      });
     });
   }
 

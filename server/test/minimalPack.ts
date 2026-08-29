@@ -6,7 +6,7 @@
  */
 import { TableState, Player } from '../src/state.js';
 import { buildTable } from '../src/engine.js';
-import { validatePack } from '../src/packValidation.js';
+import { validatePack } from '@wvtt/shared';
 import type { GamePack } from '@wvtt/shared';
 
 const pack = {

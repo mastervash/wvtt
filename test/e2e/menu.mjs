@@ -65,7 +65,7 @@ console.log('\nDice Tray: rolling a die');
     await page.waitForTimeout(1500);
 
     const logText = await page.evaluate(() => window.__wvtt.log.map((l) => l.text).join(' | '));
-    check('the roll is announced in the log', /rolled d\d+: \d+/.test(logText), logText.slice(-120));
+    check('the roll is announced in the log', /rolled a d\d+ and got \d+/.test(logText), logText.slice(-120));
 
     const after = await page.evaluate(() =>
       Object.values(window.__wvtt.pieces).filter((p) => p.kind === 'die').map((p) => p.secret?.value));

@@ -13,7 +13,7 @@ import express from 'express';
 import cors from 'cors';
 import { Server, matchMaker } from '@colyseus/core';
 import { WebSocketTransport } from '@colyseus/ws-transport';
-import { BUILTIN_PACKS } from '@wvtt/shared';
+import { BUILTIN_PACKS, packFlavour } from '@wvtt/shared';
 import { TableRoom } from './rooms/TableRoom.js';
 import { hasRoom, pruneOldRooms } from './persistence.js';
 
@@ -62,9 +62,15 @@ app.get('/api/health', (_req, res) => {
   res.json({ ok: true, uptime: process.uptime() });
 });
 
-/** The game picker reads this rather than bundling pack definitions into the client. */
+/**
+ * The game picker reads this rather than bundling pack definitions into the client.
+ *
+ * `flavour` says which column of the home page a pack belongs in. It is computed here
+ * because it depends on whether the pack has a rules script, and the script itself is
+ * far too big to ship to a client that is only drawing a menu.
+ */
 app.get('/api/packs', (_req, res) => {
-  res.json(BUILTIN_PACKS.map((p) => p.manifest));
+  res.json(BUILTIN_PACKS.map((p) => ({ ...p.manifest, flavour: packFlavour(p) })));
 });
 
 /**
@@ -104,6 +110,13 @@ if (IS_PROD) {
 
 const pruned = pruneOldRooms();
 if (pruned > 0) console.log(`[wvtt] removed ${pruned} stale room snapshot(s)`);
+
+// Keep sweeping. Startup-only pruning never runs on a server that stays up for weeks,
+// which is exactly the server this is.
+setInterval(() => {
+  const n = pruneOldRooms();
+  if (n > 0) console.log(`[wvtt] removed ${n} stale room snapshot(s)`);
+}, 60 * 60 * 1000).unref();
 
 const httpServer = createServer(app);
 const gameServer = new Server({

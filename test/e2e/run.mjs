@@ -12,7 +12,7 @@ import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
-const SUITES = ['multiplayer.mjs', 'editor.mjs', 'poker.mjs', 'menu.mjs', 'interaction.mjs', 'mobile.mjs'];
+const SUITES = ['multiplayer.mjs', 'editor.mjs', 'poker.mjs', 'menu.mjs', 'hotkeys.mjs', 'rooms.mjs', 'interaction.mjs', 'mobile.mjs'];
 const children = [];
 
 function start(name, args) {

@@ -47,13 +47,15 @@ export class Piece extends Schema {
   declare order: number;
   declare zoneId: string;    // '' when not in any zone
   declare heldBy: string;    // '' when not held
+  /** Pinned to the table: no move, flip or draw touches it until it is unlocked. */
+  declare locked: boolean;
   declare secret: Secret;
 }
 defineTypes(Piece, {
   id: 'string', kind: 'string', defId: 'string',
   x: 'number', y: 'number', z: 'number', rotY: 'number',
   faceUp: 'boolean', stackId: 'string', order: 'number',
-  zoneId: 'string', heldBy: 'string',
+  zoneId: 'string', heldBy: 'string', locked: 'boolean',
   secret: Secret,
 });
 // Gate the identity behind per-client visibility. Must come after defineTypes.
@@ -67,16 +69,32 @@ export class Stack extends Schema {
   declare rotY: number;
   declare zoneId: string;
   declare heldBy: string;
+  /**
+   * A name the players gave this pile, e.g. "Discard" or "Bob's stash".
+   *
+   * A sandbox table quickly grows five identical-looking piles, and "shuffle the pile"
+   * is meaningless when nobody can say which one. Empty when unnamed.
+   */
+  declare label: string;
+  /** Group tag. Piles sharing a tag are drawn with the same colour chip. */
+  declare tag: string;
+  /** Pinned in place: refuses drags, draws, shuffles and splits. */
+  declare locked: boolean;
   /** Piece ids, bottom first. */
   declare pieceIds: ArraySchema<string>;
   constructor() {
     super();
+    this.label = '';
+    this.tag = '';
+    this.locked = false;
     this.pieceIds = new ArraySchema<string>();
   }
 }
 defineTypes(Stack, {
   id: 'string', x: 'number', y: 'number', z: 'number', rotY: 'number',
-  zoneId: 'string', heldBy: 'string', pieceIds: ['string'],
+  zoneId: 'string', heldBy: 'string',
+  label: 'string', tag: 'string', locked: 'boolean',
+  pieceIds: ['string'],
 });
 
 export class Zone extends Schema {
@@ -111,12 +129,32 @@ defineTypes(Player, {
   connected: 'boolean', px: 'number', pz: 'number',
 });
 
+/**
+ * One line in the table log.
+ *
+ * The actor is carried as its own field rather than baked into `text`, because the log
+ * is read as much as it is written: players want to see who did what at a glance, and
+ * filter the feed down to one person or one category. A line with no `name` is the
+ * table itself talking.
+ *
+ * `text` is public state. Nothing written here may name the identity of a piece the
+ * reader is not entitled to know — see describePiece() in ops.ts.
+ */
 export class LogEntry extends Schema {
   declare id: string;
   declare text: string;
   declare at: number;
+  /** Who did it, or '' for the table itself. */
+  declare name: string;
+  /** That player's colour, so the log matches their cursor and chat. */
+  declare color: string;
+  /** 'move' | 'cards' | 'dice' | 'table' | 'rules' | 'presence' — drives filtering. */
+  declare kind: string;
 }
-defineTypes(LogEntry, { id: 'string', text: 'string', at: 'number' });
+defineTypes(LogEntry, {
+  id: 'string', text: 'string', at: 'number',
+  name: 'string', color: 'string', kind: 'string',
+});
 
 export class ChatMessage extends Schema {
   declare id: string;

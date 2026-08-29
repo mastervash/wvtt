@@ -17,7 +17,7 @@ function table(pack = sandboxPack) {
   buildTable(state, pack, [0]);
   const ctx: OpContext = {
     state, peeks: new Map(), sessionId: 's', seat: 0,
-    sidesOf: () => 6, playerName: () => 'Ana',
+    sidesOf: () => 6, labelOf: () => '', playerName: () => 'Ana', playerColor: () => '#fff',
   };
   return { state, ctx };
 }

@@ -56,8 +56,19 @@ function announceTurn(table) {
   table.status(nameOfSeat(table, seat) + ' to play' + hint);
 }
 
-function onSetup(table) {
+function onSetup(table, reason) {
   var seats = seatsInOrder(table);
+
+  // 'reset' means the player pressed Reset table and wants a cleared table, not a new
+  // hand dealt on the spot — which would look like the button had done nothing.
+  if (reason === 'reset') {
+    table.setVar('turn', null);
+    table.setVar('top', null);
+    table.shuffle();
+    table.status('Table cleared — press New hand to deal');
+    table.log('Table reset. The deck is shuffled and every hand is empty.');
+    return;
+  }
 
   // Gather every card back before dealing. onSetup also runs when a player presses
   // "New hand", so without this a second deal piles fresh cards on top of the old ones.
