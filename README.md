@@ -6,6 +6,27 @@ a phone or a desktop, in a room you share with a six-character code. No account 
 Games are **packs**: plain JSON describing the components, the table layout and an
 optional rules script. Chess and poker are packs. So is anything you make.
 
+![A hand of Wild Colours in progress: the draw pile, the discard, another player's
+face-down hand across the table, and your own hand mirrored in the tray along the
+bottom](docs/images/table.png)
+
+## What it looks like
+
+| | |
+|---|---|
+| ![The lobby, split into sandbox kits and games that referee themselves](docs/images/lobby.png) | ![The right-click menu on a pile, with a submenu of how many cards to take](docs/images/menu.png) |
+| **Pick a game.** Sandboxes on the left, packs that enforce their own rules on the right. Tables you have been at are listed underneath, and rejoining rebuilds one from its snapshot. | **Everything that is not a drag.** Shuffle, draw, split, deal to one seat or to everyone, rotate, lock, name, ping. Counts open a submenu rather than a prompt box — a keyboard covering the table is no use on a phone. |
+| ![The table log, showing each player's actions in their own colour](docs/images/log.png) | ![The dice tray, thirteen dice with their rolled values on billboards above them](docs/images/dice.png) |
+| **Who did what.** Every action lands in the log with the name and colour of whoever did it, filterable by category. It never names a card that is not already common knowledge — a face-down card is "a card", even in the line about the player who moved it. | **Dice you can read.** The value is drawn on a billboard above the die rather than painted on it: a number stretched across a polyhedron's UVs cannot be read from any angle. Rolls happen on the server, so nobody can nudge one. |
+
+![The pack editor, with a game described in prose and the generated prompt below
+it](docs/images/editor.png)
+
+**Make your own game.** Describe it, and the editor writes a prompt containing the whole
+pack format and script API for you to paste into any AI assistant. Paste the JSON back
+and it validates as you type — the same checks the server runs — before it will let you
+load it onto the table.
+
 ## Run your own
 
 One container, one port, no database. Everything below assumes nothing but Docker.
