@@ -3,7 +3,7 @@
 Browser multiplayer 3D sandbox tabletop. Cards, chips, dice and boards, playable on phone
 or desktop, in a room shared by a six-character code. Guests only, no accounts.
 
-Repo: https://github.com/mastervash/wvtt (private)
+Repo: https://github.com/mastervash/wvtt
 
 ## Layout on this machine
 
@@ -18,9 +18,11 @@ This project has been moved and renamed once, so check before assuming a path:
 Deploy with `npm run build` then `sudo systemctl restart wvtt`. The service serves the
 built client, the JSON API and the game websocket on port 2567.
 
-Port 2567 is closed to the internet. Nginx Proxy Manager (a Docker container) proxies it
-and reaches the host at `172.23.0.1:2567`, allowed by a ufw rule scoped to that bridge.
-NPM needs **Websockets Support ON**; everything rides one connection.
+Port 2567 is closed to the internet; a reverse proxy in front of it terminates TLS. When
+that proxy runs in a container it reaches the host over the container bridge, so the
+firewall rule has to allow that interface and nothing else — check the deployment's own
+notes for the address, it is not in this repo. Whatever the proxy, it needs **websocket
+support switched on**: the API and the game share one connection.
 
 ## Architecture
 
@@ -32,7 +34,8 @@ Three layers, and the boundary between them is the point:
 - **Layer 2, the rules script** — optional sandboxed JavaScript that can veto moves.
   Per-room switch: off / advisory / enforced.
 
-Built-in packs (chess, Crazy Eights, Hold'em, dice, blank board) are authored in exactly
+Built-in packs (card sandbox, dice tray, blank board, Crazy Eights, Wild Colours, Prompt
+Party, Hold'em, chess) are authored in exactly
 the format users get from the in-app editor. There is no privileged built-in path — if a
 built-in needs a capability, the format gains it and every user pack gains it too.
 
