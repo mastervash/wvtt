@@ -6,6 +6,7 @@
  */
 
 import { useStore, useMySeat } from '../net/store';
+import { usePanelDrag } from './layout';
 
 /** mm:ss, dropping to tenths in the last ten seconds the way a real clock does. */
 function format(ms: number): string {
@@ -22,6 +23,9 @@ export function Clock() {
   const players = useStore((s) => s.snap.players);
   const send = useStore((s) => s.send);
   const mySeat = useMySeat();
+  // Called before the early returns: hooks may not run conditionally, and the clock is
+  // hidden far more often than it is shown.
+  const panel = usePanelDrag('clock');
 
   if (!clock?.enabled) return null;
 
@@ -38,7 +42,12 @@ export function Clock() {
   const myTurn = clock.running && clock.activeSeat === mySeat && mySeat >= 0;
 
   return (
-    <div className="clock">
+    <div className={`clock panel ${panel.className}`} ref={panel.ref} style={panel.style}>
+      {/* A bare grip rather than a title bar: the clock is four small rows and a
+          caption over it would be taller than the thing it names. */}
+      <div className="clock-grip" {...panel.handleProps} title="Drag to move the clock">
+        <span className="grip-dots" aria-hidden="true" />
+      </div>
       {seats.map((seat) => {
         const ms = clock.times[String(seat)] ?? 0;
         const active = clock.activeSeat === seat && clock.running;

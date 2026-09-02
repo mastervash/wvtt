@@ -10,7 +10,8 @@ import type { Op } from '@wvtt/shared';
 import type { TableState, Piece, Stack } from './state.js';
 import { ChatMessage } from './state.js';
 import {
-  detachFromStack, makeStack, relayoutZone, replaceIds, restackYs, snapToGrid,
+  APPEND_ORDER,
+  detachFromStack, makeStack, relayoutZone, replaceIds, restackYs, restingY, snapToGrid,
   thicknessOf, zoneAt, pushLog,
 } from './engine.js';
 import { shuffleInPlace, rollDie, makeId } from './rng.js';
@@ -270,9 +271,12 @@ export function applyOp(ctx: OpContext, op: Op): OpResult {
         const piece = t.obj as Piece;
         // Dropping a piece somewhere new takes it out of any stack it was in.
         detachFromStack(state, piece);
-        piece.y = 0;
+        // Rest ON whatever it was laid across rather than inside it. Two pieces at the
+        // same height on the same patch of felt are coplanar, and coplanar meshes
+        // z-fight — which is what made overlapping cards fade through one another.
+        piece.y = restingY(state, piece, x, z);
         // Entering a private hand means the owner should be able to read it.
-        if (zone?.visibility === 'owner') piece.order = 9999;
+        if (zone?.visibility === 'owner') piece.order = APPEND_ORDER;
 
         // Laying a card neatly on another one should make a pile, the way it would on
         // a real table. Grid zones are excluded: there, landing on a square is the
@@ -561,7 +565,7 @@ export function applyOp(ctx: OpContext, op: Op): OpResult {
         piece.zoneId = target.id;
         piece.x = target.x;
         piece.z = target.z;
-        piece.y = 0;
+        piece.y = restingY(state, piece, piece.x, piece.z);
         relayoutZone(state, target.id);
       } else {
         piece.zoneId = '';
@@ -686,8 +690,11 @@ function moveIntoZone(state: TableState, piece: Piece, zoneId: string): void {
   const zone = state.zones.get(zoneId);
   piece.zoneId = zoneId;
   piece.stackId = '';
-  piece.y = 0;
   if (zone) { piece.x = zone.x; piece.z = zone.z; }
+  // A zone that lays itself out will overwrite this a moment later. One that does not —
+  // a free play area, say — receives every arrival at its exact centre, so without a
+  // resting height they would all be coplanar and z-fight into one another.
+  piece.y = restingY(state, piece, piece.x, piece.z);
   // Presentation follows the zone: a public zone shows faces, a hidden one does not.
   // The zone rule, not this flag, is what actually keeps a hand secret.
   if (zone?.visibility === 'owner' || zone?.visibility === 'public') piece.faceUp = true;

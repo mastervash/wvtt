@@ -23,6 +23,45 @@ export function thicknessOf(kind: string): number {
 }
 
 /**
+ * Smallest vertical gap that reliably separates two flat pieces on screen.
+ *
+ * Cards are 6mm thick at table scale and a laid-out hand used to step them by 1mm,
+ * which is inside the depth buffer's precision at normal camera distances: overlapping
+ * cards in a fan flickered through one another as the camera moved. A card's own
+ * thickness is the natural unit and is still far too small to see as a step.
+ */
+export const LAYER_STEP = 0.006;
+
+/**
+ * Height at which a flat piece should sit so it rests ON whatever it overlaps rather
+ * than inside it.
+ *
+ * Two cards dropped on the same patch of felt were both put at y = 0, which is exactly
+ * coplanar — the pair then z-fought and appeared to fade through each other. Real cards
+ * cannot occupy the same height, so neither may these: a dropped piece is lifted clear
+ * of anything it lands across.
+ *
+ * The scan is over loose pieces only. A piece inside a stack has its height managed by
+ * restackYs(), and a stack's own footprint is handled by the auto-stack merge.
+ */
+export function restingY(state: TableState, piece: Piece, x: number, z: number): number {
+  const step = Math.max(LAYER_STEP, thicknessOf(piece.kind));
+  // Half-extents of a card-sized footprint. Deliberately generous: two cards that
+  // merely clip corners still z-fight along the overlap.
+  const reach = 0.5;
+  let top = 0;
+  state.pieces.forEach((other) => {
+    if (other.id === piece.id || other.stackId) return;
+    if (Math.abs(other.x - x) > reach || Math.abs(other.z - z) > reach) return;
+    const otherTop = other.y + Math.max(LAYER_STEP, thicknessOf(other.kind));
+    if (otherTop > top) top = otherTop;
+  });
+  // Bounded so a table that is shuffled around for an hour cannot grow a tower of
+  // invisible height that pushes later cards above the camera.
+  return Math.min(top, step * 40);
+}
+
+/**
  * Order given to a piece arriving in a laid-out zone, so relayoutZone() puts it last.
  *
  * A piece dropped into a row keeps whatever position it held in the zone it came
@@ -285,7 +324,10 @@ export function relayoutZone(state: TableState, zoneId: string): void {
   members.forEach((p, i) => {
     p.x = zone.x + (n > 1 ? (i - (n - 1) / 2) * spacing : 0);
     p.z = zone.z;
-    p.y = 0.001 * i;
+    // Cards in a fan overlap heavily, so the step between them has to clear the depth
+    // buffer's precision at table distance. A millimetre did not, and the overlap
+    // shimmered as the camera moved.
+    p.y = LAYER_STEP * i;
     p.order = i;
     // A fanned hand tilts each card a little, like holding it.
     p.rotY = zone.layout === 'fan' && n > 1 ? (i - (n - 1) / 2) * 0.06 : 0;

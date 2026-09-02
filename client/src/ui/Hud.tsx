@@ -16,6 +16,7 @@ import {
   useSettings, LOG_KINDS, LOG_KIND_LABELS, QUALITY_LABELS, type LogKind, type Quality,
 } from './settings';
 import { useHotkeys, HOTKEYS } from './hotkeys';
+import { usePanelDrag, useLayout } from './layout';
 import { PieceMenu } from './PieceMenu';
 import { Chat } from './Chat';
 import { Clock, ClockSettings } from './Clock';
@@ -54,6 +55,11 @@ export function Hud() {
   const [chatOpen, setChatOpen] = useState(false);
   // Track what has been read so the button can show there is something new.
   const [seenChat, setSeenChat] = useState(0);
+
+  const menuPanel = usePanelDrag('menu');
+  const logPanel = usePanelDrag('log');
+  const resetPanels = useLayout((s) => s.reset);
+  const panelsMoved = useLayout((s) => Object.keys(s.positions).length > 0);
 
   // The editor is a full-screen panel with its own text fields, so shortcuts stand
   // down while it is open.
@@ -100,6 +106,13 @@ export function Hud() {
 
   const unread = chatOpen ? 0 : Math.max(0, snap.chat.length - seenChat);
   const myName = snap.players[sessionId]?.name ?? '';
+
+  // Everything arriving while the chat is open counts as read the moment it lands.
+  // Marking read only on the topbar button left the panel's own ✕ out of the loop, so
+  // closing the chat that way resurrected a count for messages already on screen.
+  useEffect(() => {
+    if (chatOpen) setSeenChat(snap.chat.length);
+  }, [chatOpen, snap.chat.length]);
 
   // The log is written verbosely on the server and thinned out here, so a player can
   // follow only what they care about without the table having to agree on one setting.
@@ -166,12 +179,16 @@ export function Hud() {
           ))}
           <button onClick={() => recenterCamera()} title="Recentre the view on your seat">Recentre</button>
           <button
-            className={unread > 0 ? 'has-unread' : ''}
+            className={`with-badge ${chatOpen ? 'on' : ''} ${unread > 0 ? 'has-unread' : ''}`}
             onClick={() => { setChatOpen((v) => !v); setSeenChat(snap.chat.length); }}
+            title={unread > 0 ? `${unread} unread message${unread === 1 ? '' : 's'}` : 'Table chat'}
           >
-            Chat{unread > 0 ? ` (${unread})` : ''}
+            Chat
+            {unread > 0 && (
+              <span className="badge" aria-label={`${unread} unread`}>{unread > 9 ? '9+' : unread}</span>
+            )}
           </button>
-          <button onClick={() => setLogOpen((v) => !v)}>Log</button>
+          <button className={logOpen ? 'on' : ''} onClick={() => setLogOpen((v) => !v)}>Log</button>
         </div>
 
         <div className="players">
@@ -189,7 +206,13 @@ export function Hud() {
       </div>
 
       {menuOpen && (
-        <div className="menu">
+        <div className={`menu panel ${menuPanel.className}`} ref={menuPanel.ref} style={menuPanel.style}>
+          <header {...menuPanel.handleProps}>
+            <span className="grip-dots" aria-hidden="true" />
+            <span>Table settings</span>
+            <button className="icon" onClick={() => setMenuOpen(false)} title="Close">✕</button>
+          </header>
+
           <h3>Seat</h3>
           <div className="seats">
             {Array.from({ length: snap.maxSeats }, (_, i) => (
@@ -293,7 +316,7 @@ export function Hud() {
           </div>
           <p className="hint">Scales every panel. The table itself zooms with the camera.</p>
 
-          <h3>Table</h3>
+          <h3>Table behaviour</h3>
           <label className="check" style={{ marginBottom: 6 }}>
             <input
               type="checkbox"
@@ -302,6 +325,16 @@ export function Hud() {
             />
             Cards snap into piles when laid on each other
           </label>
+          <h3>Panels</h3>
+          <p className="hint" style={{ marginTop: 0 }}>
+            Drag any panel by its title bar to move it. The chat, the log, this menu and
+            the clock all remember where you put them.
+          </p>
+          <button className="wide" disabled={!panelsMoved} onClick={resetPanels}>
+            Reset panel positions
+          </button>
+
+          <h3>Table</h3>
           <button className="wide" onClick={() => { setEditorOpen(true); setMenuOpen(false); }}>
             Make your own game
           </button>
@@ -313,8 +346,9 @@ export function Hud() {
       )}
 
       {logOpen && (
-        <div className="log">
-          <header>
+        <div className={`log panel ${logPanel.className}`} ref={logPanel.ref} style={logPanel.style}>
+          <header {...logPanel.handleProps}>
+            <span className="grip-dots" aria-hidden="true" />
             <span>Table log</span>
             <label className="check tiny">
               <input

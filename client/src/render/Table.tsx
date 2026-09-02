@@ -15,7 +15,7 @@ import type { ComponentDef } from '@wvtt/shared';
 import { useStore, useMySeat, canRead, PING_MS, type Ping, type Snapshot } from '../net/store';
 import { useSettings, dragButtonIndex, QUALITY } from '../ui/settings';
 import { Piece } from './Piece';
-import { checkerTexture } from './faces';
+import { checkerTexture, feltTexture, zoneTexture } from './faces';
 
 const TABLE_W = 16;
 const TABLE_H = 11;
@@ -110,29 +110,64 @@ export function Table() {
       // Turning shadows on or off changes how the renderer is built, so the canvas is
       // remounted when it changes. Rare enough to be worth the simplicity.
       key={shadows ? 'shadows' : 'flat'}
-      shadows={shadows}
+      // 'soft' selects PCFSoftShadowMap. At the same map size it costs a handful of
+      // extra taps and removes the stair-stepped shadow edge that made every card
+      // look pasted onto the felt.
+      shadows={shadows ? 'soft' : false}
       dpr={q.dpr}
       gl={{ antialias: q.antialias, powerPreference: 'high-performance' }}
       camera={{ fov: 42, position: [0, 8, 11], near: 0.1, far: 100 }}
-      style={{ position: 'absolute', inset: 0, touchAction: 'none' }}
+      // The room behind the table is a CSS gradient rather than a scene background:
+      // it costs no draw call, and a flat fill made the table's far edge dissolve
+      // into the same colour it was drawn against.
+      style={{
+        position: 'absolute',
+        inset: 0,
+        touchAction: 'none',
+        background: 'radial-gradient(120% 80% at 50% 18%, #1b2530 0%, #12171d 45%, #090b0e 100%)',
+      }}
       onContextMenu={(e) => e.preventDefault()}
       // Leaving the canvas leaves nothing hovered. Pieces clear their own hover on
       // pointer-out, but a pointer that exits the window never sends one.
       onPointerLeave={() => useStore.getState().setHovered(null)}
     >
-      <color attach="background" args={['#0d1014']} />
-      <ambientLight intensity={0.9} />
-      <hemisphereLight intensity={1.1} groundColor="#2a2a33" />
+      {/* Lighting is deliberately directional. The old rig was mostly ambient, which
+          lit every surface of every piece equally: a stack of chips became one
+          featureless column and a chess knight lost its silhouette. The key light now
+          carries most of the intensity, and a cool fill from the opposite side keeps
+          the shadow side readable instead of black. */}
+      <ambientLight intensity={0.42} />
+      <hemisphereLight args={['#cfe0f2', '#2a2a33', 0.85]} />
       <directionalLight
         position={[6, 12, 6]}
-        intensity={2.2}
+        intensity={2.3}
         castShadow={shadows}
         shadow-mapSize={[q.shadowMap || 512, q.shadowMap || 512]}
-        shadow-camera-left={-12}
-        shadow-camera-right={12}
-        shadow-camera-top={12}
-        shadow-camera-bottom={-12}
+        // Sized to the table and no further. Every unit of frustum outside the felt is
+        // shadow-map resolution spent on nothing, and a card is under thirty texels
+        // across as it is — which is what made the edge of a card's shadow read as a
+        // row of dashes rather than a line.
+        shadow-camera-left={-10}
+        shadow-camera-right={10}
+        shadow-camera-top={10}
+        shadow-camera-bottom={-10}
+        // Tightened from the 0.5/500 default so the depth range is spent on the table
+        // instead of empty space, and biased so a card's own shadow stops striping it.
+        shadow-camera-near={2}
+        shadow-camera-far={34}
+        shadow-bias={-0.0006}
+        // Cards in a fan sit a fraction of a millimetre apart, which is well inside the
+        // shadow map's precision: without a generous normal offset each card stipples
+        // its neighbour with its own shadow.
+        shadow-normalBias={0.055}
       />
+      {/* Fill. No shadow: a second shadow caster doubles the cost and reads as a
+          lighting mistake rather than as depth. */}
+      <directionalLight position={[-9, 5, -7]} intensity={0.55} color="#8fb4d6" />
+      {/* A dim warm bounce from below, standing in for light coming back off the felt.
+          Without it the underside of a chess piece or a chip goes to flat shadow and
+          the silhouette stops reading as a solid object. */}
+      <directionalLight position={[0, -4, 3]} intensity={0.22} color="#ffd9a8" />
       <Felt color={tableColor} />
       <Scene />
     </Canvas>
@@ -140,17 +175,28 @@ export function Table() {
 }
 
 function Felt({ color }: { color: string }) {
+  // Regenerated only when the room changes table colour; faces.ts caches per colour.
+  const surface = useMemo(() => feltTexture(color), [color]);
   return (
     <group>
       <mesh receiveShadow rotation={[-Math.PI / 2, 0, 0]} position={[0, 0, 0]}>
         <planeGeometry args={[TABLE_W, TABLE_H]} />
-        <meshStandardMaterial color={color} roughness={0.95} />
+        {/* The map already carries the colour, the weave and the vignette, so the
+            material must not tint it again — hence white. */}
+        <meshStandardMaterial map={surface} color="#ffffff" roughness={0.95} />
       </mesh>
       {/* A rim, so the table reads as an object rather than an infinite plane. Its top
           face must stay below the felt or it hides it. */}
       <mesh position={[0, -0.12, 0]} receiveShadow>
         <boxGeometry args={[TABLE_W + 0.7, 0.2, TABLE_H + 0.7]} />
-        <meshStandardMaterial color="#4a3524" roughness={0.8} />
+        <meshStandardMaterial color="#553d29" roughness={0.55} metalness={0.05} />
+      </mesh>
+      {/* A second, wider and darker step below the rim. One slab of wood reads as a
+          coloured border; two steps read as an edge with thickness, which is what
+          gives the table a sense of sitting in a room. */}
+      <mesh position={[0, -0.29, 0]}>
+        <boxGeometry args={[TABLE_W + 1.3, 0.16, TABLE_H + 1.3]} />
+        <meshStandardMaterial color="#2b1f15" roughness={0.85} />
       </mesh>
     </group>
   );
@@ -203,6 +249,8 @@ function Scene() {
     t: number;
     moved: boolean;
     armed: boolean;
+    /** How far the pointer may wander before this stops being a tap. */
+    slop: number;
     mode: 'undecided' | 'card' | 'pile' | 'loose';
   } | null>(null);
   /** Fires if a press is held still long enough to mean "open the menu". */
@@ -329,6 +377,11 @@ function Scene() {
       t: performance.now(),
       moved: false,
       armed: false,
+      // A finger never lands and lifts on the same pixel, and six pixels of slop is
+      // inside the noise of a touch screen: taps meant as a flip were being read as
+      // tiny drags and silently became drops instead. A mouse stays precise, so only
+      // touch and pen get the wider window.
+      slop: e.pointerType === 'mouse' ? 6 : 14,
       mode: piece.stackId ? 'undecided' : 'loose',
     };
     setDragging(targetId);
@@ -381,7 +434,7 @@ function Scene() {
     const g = gesture.current;
     if (!g) return;
     const justMoved = !g.moved
-      && (Math.abs(e.clientX - g.startX) > 6 || Math.abs(e.clientY - g.startY) > 6);
+      && (Math.abs(e.clientX - g.startX) > g.slop || Math.abs(e.clientY - g.startY) > g.slop);
 
     if (justMoved) {
       g.moved = true;
@@ -430,7 +483,11 @@ function Scene() {
       return;
     }
 
-    const tapped = !g.moved && performance.now() - g.t < 400;
+    // A press that never moved and never armed the long-press is a tap, however long
+    // it was held. The old test also required it to be under 400ms, which left a dead
+    // band between 400ms and the 450ms long-press where a press did nothing at all —
+    // the reason flipping a card felt like it worked only sometimes.
+    const tapped = !g.moved && !g.armed;
     if (tapped) {
       const stack = snap.stacks[g.id];
       if (stack && mySeat >= 0 && snap.zones[`hand${mySeat}`]) {
@@ -529,6 +586,7 @@ function Scene() {
 }
 
 function Zones({ snap, mySeat }: { snap: Snapshot; mySeat: number }) {
+  const marker = zoneTexture();
   return (
     <group>
       {Object.values(snap.zones).map((z) => {
@@ -536,8 +594,11 @@ function Zones({ snap, mySeat }: { snap: Snapshot; mySeat: number }) {
         const owned = (z.ownerSeat ?? -1) >= 0;
         // Only your own private zone is highlighted; other players' hands are drawn
         // faintly so you can see where they are without them drawing attention.
-        const color = mine ? '#5ac8fa' : owned ? '#6b7280' : '#c8b88a';
-        const opacity = mine ? 0.16 : owned ? 0.05 : 0.08;
+        const color = mine ? '#5ac8fa' : owned ? '#8d97a5' : '#d9c89a';
+        // Higher than the old flat-rectangle values because the marker texture is
+        // mostly transparent: these numbers now set the brightness of a thin border,
+        // not of a slab covering the whole zone.
+        const opacity = mine ? 0.55 : owned ? 0.1 : 0.2;
         const isGrid = z.layout === 'grid' && z.gridCols > 0 && z.gridRows > 0;
         const isBoard = isGrid && z.checkered;
         return (
@@ -547,7 +608,13 @@ function Zones({ snap, mySeat }: { snap: Snapshot; mySeat: number }) {
             ) : (
               <mesh rotation={[-Math.PI / 2, 0, 0]}>
                 <planeGeometry args={[z.w, z.h]} />
-                <meshBasicMaterial color={color} transparent opacity={opacity} depthWrite={false} />
+                <meshBasicMaterial
+                  map={marker}
+                  color={color}
+                  transparent
+                  opacity={opacity}
+                  depthWrite={false}
+                />
               </mesh>
             )}
             {isGrid && <GridLines zone={z} />}
@@ -742,12 +809,20 @@ function HoverRing({ snap, hovered }: { snap: Snapshot; hovered: string | null }
   const target = snap.stacks[hovered] ?? snap.pieces[hovered];
   if (!target) return null;
   return (
-    <mesh position={[target.x, 0.016, target.z]} rotation={[-Math.PI / 2, 0, 0]}>
+    <group position={[target.x, 0.016, target.z]} rotation={[-Math.PI / 2, 0, 0]}>
       {/* Wider than a card's half-diagonal, so the ring shows AROUND the piece rather
-          than disappearing underneath it. */}
-      <ringGeometry args={[0.58, 0.66, 40]} />
-      <meshBasicMaterial color="#ffffff" transparent opacity={0.5} depthWrite={false} />
-    </mesh>
+          than disappearing underneath it. Two rings rather than one: the bright inner
+          hairline is what the eye locks onto, and the wide dim halo is what makes it
+          findable on pale artwork without painting a white disc on the felt. */}
+      <mesh>
+        <ringGeometry args={[0.6, 0.645, 48]} />
+        <meshBasicMaterial color="#eaf7ff" transparent opacity={0.75} depthWrite={false} />
+      </mesh>
+      <mesh>
+        <ringGeometry args={[0.645, 0.82, 48]} />
+        <meshBasicMaterial color="#5ac8fa" transparent opacity={0.14} depthWrite={false} />
+      </mesh>
+    </group>
   );
 }
 

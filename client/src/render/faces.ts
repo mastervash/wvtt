@@ -45,6 +45,61 @@ function roundRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: numbe
   ctx.closePath();
 }
 
+/**
+ * The card stock every face is drawn on.
+ *
+ * A flat fill reads as a rectangle of paint; a very shallow vertical gradient plus a
+ * hairline inner rule reads as card stock under a light. Both are nearly free, and
+ * they are what makes the deck look printed rather than filled.
+ */
+function paperFill(ctx: CanvasRenderingContext2D, w: number, h: number, tint = '#fbfaf6') {
+  // The top stop is derived from the tint, not a fixed white. A pack's cards can be any
+  // colour, and a hard white top on a saturated blue card reads as a lighting fault
+  // rather than as paper — on the default near-white stock the two are indistinguishable.
+  const grad = ctx.createLinearGradient(0, 0, 0, h);
+  grad.addColorStop(0, shade(tint, 0.22));
+  grad.addColorStop(0.35, tint);
+  grad.addColorStop(1, shade(tint, -0.08));
+  ctx.fillStyle = grad;
+  roundRect(ctx, 4, 4, w - 8, h - 8, 22);
+  ctx.fill();
+
+  ctx.strokeStyle = 'rgba(0,0,0,0.20)';
+  ctx.lineWidth = 2;
+  roundRect(ctx, 4, 4, w - 8, h - 8, 22);
+  ctx.stroke();
+
+  // The inner rule. Barely visible on its own, but its absence is what makes a
+  // generated card look like a slide rather than a card.
+  ctx.strokeStyle = 'rgba(0,0,0,0.07)';
+  ctx.lineWidth = 1.5;
+  roundRect(ctx, 13, 13, w - 26, h - 26, 15);
+  ctx.stroke();
+}
+
+/** Lighten (+) or darken (-) a hex colour by a fraction. Used for shading only. */
+function shade(hex: string, amount: number): string {
+  const m = /^#?([0-9a-f]{6})$/i.exec(hex.trim());
+  if (!m) return hex;
+  const n = parseInt(m[1], 16);
+  const ch = [(n >> 16) & 255, (n >> 8) & 255, n & 255].map((v) =>
+    Math.max(0, Math.min(255, Math.round(amount >= 0 ? v + (255 - v) * amount : v * (1 + amount)))));
+  return `#${ch.map((v) => v.toString(16).padStart(2, '0')).join('')}`;
+}
+
+/** A short centred hairline, used to separate a crest's letter from its suit. */
+function rule(ctx: CanvasRenderingContext2D, cx: number, y: number, w: number, color: string) {
+  const grad = ctx.createLinearGradient(cx - w / 2, 0, cx + w / 2, 0);
+  grad.addColorStop(0, 'rgba(0,0,0,0)');
+  grad.addColorStop(0.5, color);
+  grad.addColorStop(1, 'rgba(0,0,0,0)');
+  ctx.save();
+  ctx.globalAlpha = 0.5;
+  ctx.fillStyle = grad;
+  ctx.fillRect(cx - w / 2, y, w, 1.5);
+  ctx.restore();
+}
+
 /** Pip layout for number cards, in fractions of the card's inner area. */
 const PIP_LAYOUT: Record<string, [number, number][]> = {
   '2': [[0.5, 0.18], [0.5, 0.82]],
@@ -63,20 +118,20 @@ function drawPlayingCard(rank: string, suit: string): HTMLCanvasElement {
   const color = SUIT_COLOR[suit] ?? '#16161a';
   const glyph = SUIT_GLYPH[suit] ?? '?';
 
-  ctx.fillStyle = '#fbfaf6';
-  roundRect(ctx, 4, 4, CARD_PX_W - 8, CARD_PX_H - 8, 22);
-  ctx.fill();
-  ctx.strokeStyle = 'rgba(0,0,0,0.18)';
-  ctx.lineWidth = 2;
-  ctx.stroke();
+  paperFill(ctx, CARD_PX_W, CARD_PX_H);
 
   if (rank === 'X') {
-    ctx.fillStyle = color;
-    ctx.font = 'bold 44px Georgia, serif';
     ctx.textAlign = 'center';
-    ctx.fillText('JOKER', CARD_PX_W / 2, CARD_PX_H / 2 - 10);
-    ctx.font = '90px Georgia, serif';
-    ctx.fillText('★', CARD_PX_W / 2, CARD_PX_H / 2 + 90);
+    ctx.fillStyle = color;
+    ctx.font = '150px Georgia, serif';
+    ctx.globalAlpha = 0.12;
+    ctx.fillText('★', CARD_PX_W / 2, CARD_PX_H / 2 + 108);
+    ctx.globalAlpha = 1;
+    ctx.font = 'bold 42px Georgia, serif';
+    ctx.fillText('JOKER', CARD_PX_W / 2, CARD_PX_H / 2 - 16);
+    rule(ctx, CARD_PX_W / 2, CARD_PX_H / 2 + 4, 96, color);
+    ctx.font = '84px Georgia, serif';
+    ctx.fillText('★', CARD_PX_W / 2, CARD_PX_H / 2 + 92);
     return c;
   }
 
@@ -102,26 +157,43 @@ function drawPlayingCard(rank: string, suit: string): HTMLCanvasElement {
     // Court cards get a simple crest rather than a figure — legible at table scale.
     ctx.fillStyle = color;
     roundRect(ctx, innerX, innerY, innerW, innerH, 12);
-    ctx.globalAlpha = 0.08;
+    ctx.globalAlpha = 0.07;
     ctx.fill();
     ctx.globalAlpha = 1;
+    // A double rule: the outer heavy, the inner hairline, the way a real court card's
+    // frame is printed. One line alone reads as a placeholder box.
     ctx.strokeStyle = color;
     ctx.lineWidth = 3;
     roundRect(ctx, innerX, innerY, innerW, innerH, 12);
     ctx.stroke();
+    ctx.globalAlpha = 0.45;
+    ctx.lineWidth = 1.5;
+    roundRect(ctx, innerX + 7, innerY + 7, innerW - 14, innerH - 14, 8);
+    ctx.stroke();
+    ctx.globalAlpha = 1;
     ctx.textAlign = 'center';
     ctx.font = 'bold 116px Georgia, serif';
-    ctx.fillText(rank, CARD_PX_W / 2, CARD_PX_H / 2 + 16);
-    ctx.font = '52px Georgia, serif';
-    ctx.fillText(glyph, CARD_PX_W / 2, CARD_PX_H / 2 + 84);
+    ctx.fillText(rank, CARD_PX_W / 2, CARD_PX_H / 2 + 10);
+    rule(ctx, CARD_PX_W / 2, CARD_PX_H / 2 + 34, 84, color);
+    ctx.font = '50px Georgia, serif';
+    ctx.fillText(glyph, CARD_PX_W / 2, CARD_PX_H / 2 + 88);
     return c;
   }
 
   if (rank === 'A') {
-    ctx.fillStyle = color;
     ctx.textAlign = 'center';
-    ctx.font = '170px Georgia, serif';
-    ctx.fillText(glyph, CARD_PX_W / 2, CARD_PX_H / 2 + 62);
+    // A thin ring behind the single pip, so the ace reads as designed rather than as
+    // a number card that lost its other pips.
+    ctx.strokeStyle = color;
+    ctx.globalAlpha = 0.25;
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.arc(CARD_PX_W / 2, CARD_PX_H / 2, 108, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.globalAlpha = 1;
+    ctx.fillStyle = color;
+    ctx.font = '164px Georgia, serif';
+    ctx.fillText(glyph, CARD_PX_W / 2, CARD_PX_H / 2 + 60);
     return c;
   }
 
@@ -151,18 +223,48 @@ function drawCardBack(): HTMLCanvasElement {
   ctx.save();
   roundRect(ctx, 16, 16, CARD_PX_W - 32, CARD_PX_H - 32, 14);
   ctx.clip();
-  ctx.fillStyle = '#2b4a7a';
+
+  // A vertical gradient under the lattice. A single flat blue is the single clearest
+  // tell that a deck was generated; two stops cost nothing and remove it.
+  const ground = ctx.createLinearGradient(0, 16, 0, CARD_PX_H - 16);
+  ground.addColorStop(0, '#3a5d92');
+  ground.addColorStop(1, '#22406c');
+  ctx.fillStyle = ground;
   ctx.fillRect(16, 16, CARD_PX_W - 32, CARD_PX_H - 32);
+
   // Diagonal lattice.
-  ctx.strokeStyle = 'rgba(255,255,255,0.22)';
+  ctx.strokeStyle = 'rgba(255,255,255,0.20)';
   ctx.lineWidth = 3;
   for (let i = -CARD_PX_H; i < CARD_PX_W + CARD_PX_H; i += 22) {
     ctx.beginPath(); ctx.moveTo(i, 0); ctx.lineTo(i + CARD_PX_H, CARD_PX_H); ctx.stroke();
     ctx.beginPath(); ctx.moveTo(i, CARD_PX_H); ctx.lineTo(i + CARD_PX_H, 0); ctx.stroke();
   }
+
+  // A centre medallion gives the back a middle to look at, and gives a fanned hand a
+  // repeating landmark instead of an unbroken field of diagonals.
+  const cx = CARD_PX_W / 2, cy = CARD_PX_H / 2;
+  ctx.fillStyle = 'rgba(16,30,52,0.55)';
+  ctx.beginPath(); ctx.arc(cx, cy, 64, 0, Math.PI * 2); ctx.fill();
+  ctx.strokeStyle = 'rgba(255,255,255,0.38)';
+  ctx.lineWidth = 2.5;
+  ctx.beginPath(); ctx.arc(cx, cy, 64, 0, Math.PI * 2); ctx.stroke();
+  ctx.lineWidth = 1.5;
+  ctx.beginPath(); ctx.arc(cx, cy, 54, 0, Math.PI * 2); ctx.stroke();
+  ctx.fillStyle = 'rgba(255,255,255,0.80)';
+  ctx.textAlign = 'center';
+  ctx.font = 'bold 30px Georgia, serif';
+  ctx.fillText('W', cx, cy + 11);
+
+  // A soft corner-to-corner sheen, so the back catches light like a printed surface.
+  const sheen = ctx.createLinearGradient(16, 16, CARD_PX_W - 16, CARD_PX_H - 16);
+  sheen.addColorStop(0, 'rgba(255,255,255,0.10)');
+  sheen.addColorStop(0.5, 'rgba(255,255,255,0)');
+  sheen.addColorStop(1, 'rgba(0,0,0,0.16)');
+  ctx.fillStyle = sheen;
+  ctx.fillRect(16, 16, CARD_PX_W - 32, CARD_PX_H - 32);
   ctx.restore();
 
-  ctx.strokeStyle = 'rgba(0,0,0,0.18)';
+  ctx.strokeStyle = 'rgba(0,0,0,0.20)';
   ctx.lineWidth = 2;
   roundRect(ctx, 4, 4, CARD_PX_W - 8, CARD_PX_H - 8, 22);
   ctx.stroke();
@@ -173,11 +275,18 @@ function drawChip(value: number, color: string): HTMLCanvasElement {
   const size = 256;
   const [c, ctx] = canvas(size, size);
   const r = size / 2;
-  ctx.fillStyle = color;
+
+  // Body, lit from the top-left. A flat disc of colour looks like a sticker; the
+  // gradient is what makes it read as moulded clay.
+  const body = ctx.createRadialGradient(r * 0.7, r * 0.65, r * 0.1, r, r, r);
+  body.addColorStop(0, shade(color, 0.22));
+  body.addColorStop(0.65, color);
+  body.addColorStop(1, shade(color, -0.28));
+  ctx.fillStyle = body;
   ctx.beginPath(); ctx.arc(r, r, r - 4, 0, Math.PI * 2); ctx.fill();
 
   // Edge spots, the way real chips are marked.
-  ctx.fillStyle = 'rgba(255,255,255,0.85)';
+  ctx.fillStyle = 'rgba(255,255,255,0.88)';
   for (let i = 0; i < 8; i++) {
     const a = (i / 8) * Math.PI * 2;
     ctx.save();
@@ -186,7 +295,15 @@ function drawChip(value: number, color: string): HTMLCanvasElement {
     ctx.fillRect(-16, -9, 32, 18);
     ctx.restore();
   }
-  ctx.fillStyle = 'rgba(255,255,255,0.92)';
+
+  // Inlay: a recessed ring, then the pale face the value is stamped on.
+  ctx.strokeStyle = 'rgba(0,0,0,0.22)';
+  ctx.lineWidth = 3;
+  ctx.beginPath(); ctx.arc(r, r, r - 46, 0, Math.PI * 2); ctx.stroke();
+  const inlay = ctx.createRadialGradient(r * 0.8, r * 0.75, 4, r, r, r - 52);
+  inlay.addColorStop(0, '#ffffff');
+  inlay.addColorStop(1, '#e6e2d8');
+  ctx.fillStyle = inlay;
   ctx.beginPath(); ctx.arc(r, r, r - 52, 0, Math.PI * 2); ctx.fill();
 
   ctx.fillStyle = '#16161a';
@@ -198,12 +315,9 @@ function drawChip(value: number, color: string): HTMLCanvasElement {
 
 function drawTextFace(text: string, bg: string, fg: string, fontScale = 1): HTMLCanvasElement {
   const [c, ctx] = canvas(CARD_PX_W, CARD_PX_H);
-  ctx.fillStyle = bg;
-  roundRect(ctx, 4, 4, CARD_PX_W - 8, CARD_PX_H - 8, 22);
-  ctx.fill();
-  ctx.strokeStyle = 'rgba(0,0,0,0.15)';
-  ctx.lineWidth = 2;
-  ctx.stroke();
+  // Same stock as the built-in deck: a pack's own cards should not be identifiable
+  // from across the table by their flatter paper.
+  paperFill(ctx, CARD_PX_W, CARD_PX_H, bg);
 
   if (!text) return c;
 
@@ -251,7 +365,15 @@ const DIE_TINTS: Record<number, string> = {
 
 function drawDieFace(sides: number): HTMLCanvasElement {
   const [c, ctx] = canvas(128, 128);
-  ctx.fillStyle = DIE_TINTS[sides] ?? '#f2efe6';
+  const tint = DIE_TINTS[sides] ?? '#f2efe6';
+  // The UVs stretch this across every face, so it must survive being smeared: a
+  // centre-bright gradient still reads as a bevelled face wherever it lands, whereas
+  // a flat fill leaves the solid looking like untextured plastic.
+  const g = ctx.createRadialGradient(52, 46, 6, 64, 64, 84);
+  g.addColorStop(0, shade(tint, 0.35));
+  g.addColorStop(0.6, tint);
+  g.addColorStop(1, shade(tint, -0.22));
+  ctx.fillStyle = g;
   ctx.fillRect(0, 0, 128, 128);
   ctx.strokeStyle = 'rgba(0,0,0,0.35)';
   ctx.lineWidth = 8;
@@ -336,6 +458,104 @@ export function defaultBackTexture(): THREE.Texture {
   if (hit) return hit;
   const tex = finish(drawCardBack());
   cache.set('__back', tex);
+  return tex;
+}
+
+/**
+ * The table surface.
+ *
+ * The felt used to be a single flat colour, which is the one thing a real table never
+ * is: baize is woven, it soaks up light, and it falls off towards the edges. Three
+ * cheap layers fix that — broad mottling, per-pixel grain, and a vignette — and the
+ * middle of the table stops competing with the pieces sitting on it.
+ *
+ * The noise is seeded rather than Math.random: an e2e screenshot of the table should
+ * differ between runs only when something actually changed.
+ */
+export function feltTexture(color: string): THREE.Texture {
+  const key = `__felt:${color}`;
+  const hit = cache.get(key);
+  if (hit) return hit;
+
+  const W = 1536, H = 1056;
+  const [c, ctx] = canvas(W, H);
+  let seed = 0x9e3779b9;
+  const rnd = () => {
+    seed ^= seed << 13; seed ^= seed >>> 17; seed ^= seed << 5;
+    return ((seed >>> 0) % 100000) / 100000;
+  };
+
+  ctx.fillStyle = color;
+  ctx.fillRect(0, 0, W, H);
+
+  // Broad, very faint patches. Real baize is never one tone across two metres.
+  for (let i = 0; i < 90; i++) {
+    const x = rnd() * W, y = rnd() * H, r = 60 + rnd() * 220;
+    const up = rnd() > 0.5;
+    const g = ctx.createRadialGradient(x, y, 0, x, y, r);
+    g.addColorStop(0, up ? 'rgba(255,255,255,0.035)' : 'rgba(0,0,0,0.045)');
+    g.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle = g;
+    ctx.fillRect(x - r, y - r, r * 2, r * 2);
+  }
+
+  // Per-pixel grain, so the surface has a weave at close camera distances.
+  const img = ctx.getImageData(0, 0, W, H);
+  const d = img.data;
+  for (let i = 0; i < d.length; i += 4) {
+    const n = (rnd() - 0.5) * 9;
+    d[i] += n; d[i + 1] += n; d[i + 2] += n;
+  }
+  ctx.putImageData(img, 0, 0);
+
+  // Vignette. Baked into the texture rather than added as an overlay mesh: the felt
+  // covers exactly this texture, so one draw call does the whole job.
+  const v = ctx.createRadialGradient(W / 2, H * 0.44, Math.min(W, H) * 0.14, W / 2, H / 2, W * 0.63);
+  v.addColorStop(0, 'rgba(255,255,255,0.05)');
+  v.addColorStop(0.55, 'rgba(0,0,0,0)');
+  v.addColorStop(1, 'rgba(0,0,0,0.34)');
+  ctx.fillStyle = v;
+  ctx.fillRect(0, 0, W, H);
+
+  const tex = finish(c);
+  cache.set(key, tex);
+  return tex;
+}
+
+/**
+ * The marker for a zone.
+ *
+ * Zones used to be drawn as flat translucent rectangles, which on felt read as grey
+ * slabs someone had left on the table — hard-edged, uniform, and visually louder than
+ * the pieces they were meant to be behind. This is a faint fill inside a bright inset
+ * border, which is how a marked-out area on a real table looks.
+ *
+ * White, so the material's own colour tints it. The corner radius is small enough that
+ * a very wide zone stretching it into an ellipse is not noticeable.
+ */
+export function zoneTexture(): THREE.Texture {
+  const hit = cache.get('__zone');
+  if (hit) return hit;
+
+  const S = 256;
+  const [c, ctx] = canvas(S, S);
+  ctx.fillStyle = '#ffffff';
+  ctx.strokeStyle = '#ffffff';
+
+  // A whisper of fill, not a slab. A pack like Hold'em has fifteen zones, and at 0.3
+  // the felt disappeared under a patchwork of pale rectangles — the border is what
+  // says where a zone is, the fill only has to keep it from being a bare outline.
+  ctx.globalAlpha = 0.09;
+  roundRect(ctx, 5, 5, S - 10, S - 10, 12);
+  ctx.fill();
+
+  ctx.globalAlpha = 1;
+  ctx.lineWidth = 4;
+  roundRect(ctx, 9, 9, S - 18, S - 18, 10);
+  ctx.stroke();
+
+  const tex = finish(c);
+  cache.set('__zone', tex);
   return tex;
 }
 

@@ -38,6 +38,9 @@ interface Props {
 /** Lift a held piece off the table so it reads as picked up. */
 const HELD_LIFT = 0.35;
 
+/** …and tip it towards the viewer, which is what actually sells the gesture. */
+const HELD_TILT = -0.22;
+
 /** Clearance above the felt so pieces never z-fight with zone overlays. */
 const BASE_LIFT = 0.008;
 
@@ -75,13 +78,17 @@ function PieceBase({
   const y = piece.y + BASE_LIFT + (held ? HELD_LIFT : 0);
   const kind = def?.kind ?? piece.kind;
   // Flat pieces sit on the table; upright pieces are modelled from their base.
-  const yOffset = kind === 'card' || kind === 'tile' ? (def?.d ?? 0.006) / 2 : 0;
+  const flat = kind === 'card' || kind === 'tile';
+  const yOffset = flat ? (def?.d ?? 0.006) / 2 : 0;
+  // A held card tips towards the person holding it, the way one does in a real hand.
+  // Height alone reads as "floating"; the tilt is what reads as "picked up".
+  const tilt = held && flat ? HELD_TILT : 0;
 
   return (
     <group
       ref={group}
       position={[piece.x, y + yOffset, piece.z]}
-      rotation={[0, piece.rotY, 0]}
+      rotation={[tilt, piece.rotY, 0]}
       onPointerDown={(e) => onPointerDown(e, piece.id)}
       onPointerOver={(e) => onPointerOver?.(e, piece.id)}
       onPointerOut={(e) => onPointerOut?.(e, piece.id)}
@@ -94,13 +101,20 @@ function PieceBase({
         receiveShadow={shadows}
       />
       {(selected || heldByOther || hovered) && (
-        <mesh geometry={geometry} scale={selected || heldByOther ? 1.06 : 1.035}>
-          {/* Hover is drawn fainter and tighter than a grab: it is a hint about what a
-              key press would hit, not a claim that anybody is holding the piece. */}
+        <mesh geometry={geometry} scale={selected || heldByOther ? 1.055 : 1.03}>
+          {/* An outline, not a wash. Drawing the shell's BACK faces leaves only the
+              rim that sticks out past the piece — the front faces are hidden by the
+              piece itself — so the artwork underneath stays readable. The previous
+              front-facing translucent copy tinted the whole card, which made a
+              selected face-up card noticeably harder to read than an unselected one.
+
+              Hover is drawn fainter and tighter than a grab: it is a hint about what
+              a key press would hit, not a claim that anybody is holding the piece. */}
           <meshBasicMaterial
             color={heldByOther ? '#ff9f43' : selected ? '#5ac8fa' : '#ffffff'}
+            side={THREE.BackSide}
             transparent
-            opacity={selected || heldByOther ? 0.28 : 0.22}
+            opacity={selected || heldByOther ? 0.9 : 0.5}
             depthWrite={false}
           />
         </mesh>

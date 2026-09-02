@@ -38,6 +38,44 @@ await page.waitForTimeout(2500);
 const box = await page.locator('canvas').boundingBox();
 const at = (fx, fy) => [box.x + box.width * fx, box.y + box.height * fy];
 
+/**
+ * Wait for the pile's lock to reach a given value, rather than assuming a round trip
+ * fits in a fixed pause.
+ *
+ * The probe used to press L, sleep 280ms and read the state. On a loaded machine the
+ * op had not come back yet, so the NEXT position in the grid saw the previous
+ * position's lock, pressed L while hovering nothing, and recorded the wrong spot — with
+ * the deck left pinned, which quietly failed every check after it.
+ */
+async function lockSettles(want, timeoutMs = 4000) {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    if (!!Object.values((await state()).stacks)[0]?.locked === want) return true;
+    await page.waitForTimeout(120);
+  }
+  return false;
+}
+
+/**
+ * Wait until the table actually shows what a key was supposed to do.
+ *
+ * Every positive check below used to sleep for a fixed number of milliseconds and then
+ * read the state. That is a bet on round-trip latency, and on a loaded machine it is a
+ * losing one — the log showed the shuffle and the flip arriving moments after the
+ * assertion had already read the old state and failed. Absence checks still sleep,
+ * because there is nothing to wait for.
+ */
+async function settle(predicate, timeoutMs = 6000) {
+  const deadline = Date.now() + timeoutMs;
+  let last = await state();
+  while (Date.now() < deadline) {
+    if (predicate(last)) return last;
+    await page.waitForTimeout(120);
+    last = await state();
+  }
+  return last;
+}
+
 let spot = null;
 for (const fy of [0.45, 0.40, 0.50, 0.55, 0.35]) {
   for (const fx of [0.5, 0.45, 0.55, 0.40, 0.60, 0.35, 0.65, 0.3, 0.7]) {
@@ -48,10 +86,10 @@ for (const fy of [0.45, 0.40, 0.50, 0.55, 0.35]) {
     // so the probe IS a shortcut: L locks what is hovered, and locking is visible in
     // state. It is undone immediately.
     await page.keyboard.press('l');
-    await page.waitForTimeout(280);
-    if (Object.values((await state()).stacks)[0]?.locked) {
+    if (await lockSettles(true, 1200)) {
       await page.keyboard.press('l');
-      await page.waitForTimeout(280);
+      // Never leave the grid with the deck pinned: everything after this acts on it.
+      if (!(await lockSettles(false))) throw new Error('the probe could not unlock the deck');
       spot = [fx, fy];
     }
   }
@@ -70,8 +108,7 @@ if (spot) {
     const before = await state();
     const order = Object.values(before.stacks)[0].pieceIds.join(',');
     await page.keyboard.press('s');
-    await page.waitForTimeout(600);
-    const after = await state();
+    const after = await settle((st) => Object.values(st.stacks)[0].pieceIds.join(',') !== order);
     const now = Object.values(after.stacks)[0].pieceIds.join(',');
     check('the pile is shuffled', now !== order);
     check('the log says who shuffled it', /shuffled/.test(logText(after)), logText(after));
@@ -89,8 +126,8 @@ if (spot) {
     const before = await state();
     const held = Object.values(before.pieces).filter((p) => p.zoneId === handZone).length;
     await page.keyboard.press('4');
-    await page.waitForTimeout(900);
-    const after = await state();
+    const after = await settle((st) =>
+      Object.values(st.pieces).filter((p) => p.zoneId === handZone).length === held + 4);
     const now = Object.values(after.pieces).filter((p) => p.zoneId === handZone).length;
     check('four cards arrive in the hand', now === held + 4, `${held} -> ${now}`);
     check('they came off the pile', Object.values(after.stacks)[0].pieceIds.length === 48,
@@ -104,8 +141,10 @@ if (spot) {
     const topId = Object.values(before.stacks)[0].pieceIds.slice(-1)[0];
     const wasUp = before.pieces[topId].faceUp;
     await page.keyboard.press('f');
-    await page.waitForTimeout(700);
-    const after = await state();
+    const after = await settle((st) => {
+      const id = Object.values(st.stacks)[0].pieceIds.slice(-1)[0];
+      return id !== topId || st.pieces[id].faceUp !== wasUp;
+    });
     const nowTopId = Object.values(after.stacks)[0].pieceIds.slice(-1)[0];
     check('the pile is turned over', after.pieces[nowTopId].faceUp !== wasUp
       || nowTopId !== topId, 'nothing changed');
@@ -117,8 +156,9 @@ if (spot) {
     const before = await state();
     const size = Object.values(before.stacks)[0].pieceIds.length;
     await page.keyboard.press('t');
-    await page.waitForTimeout(800);
-    const after = await state();
+    const after = await settle((st) =>
+      Object.values(st.stacks).reduce((a, b) => (b.pieceIds.length > a.pieceIds.length ? b : a))
+        .pieceIds.length === size - 1);
     const biggest = Object.values(after.stacks).reduce((a, b) => (b.pieceIds.length > a.pieceIds.length ? b : a));
     check('the pile loses a card', biggest.pieceIds.length === size - 1, `${size} -> ${biggest.pieceIds.length}`);
   }
@@ -126,8 +166,7 @@ if (spot) {
   console.log('\nP pings, and the shortcut can be switched off');
   {
     await page.keyboard.press('p');
-    await page.waitForTimeout(500);
-    const after = await state();
+    const after = await settle((st) => /pinged the table/.test(logText(st)));
     check('the ping is logged', /pinged the table/.test(logText(after)), logText(after));
 
     await page.click('.topbar .icon');

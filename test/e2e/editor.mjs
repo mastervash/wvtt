@@ -59,10 +59,14 @@ await page.waitForTimeout(500);
 check('the editor opens', !!(await page.$('.editor nav')));
 
 console.log('\nPrompt generation');
-await page.fill('textarea[placeholder^="e.g."]', 'A trick-taking game about trains.');
-await page.selectOption('.grid2 select >> nth=0', 'trick');
+await page.fill('.card.step textarea >> nth=0', 'A trick-taking game about trains.');
+await page.click('.field:has-text("Shape") button:has-text("Trick-taking")');
 await page.waitForTimeout(400);
-const prompt = await page.inputValue('.prompt-out textarea');
+// The prompt is folded away behind a disclosure: it is a wall of text nobody needs to
+// read, and the button beside it copies the whole thing.
+await page.click('summary:has-text("See the prompt")');
+await page.waitForTimeout(200);
+const prompt = await page.inputValue('.card.step details textarea');
 check('the prompt includes the game description', prompt.includes('trains'));
 check('the prompt includes the script API reference', prompt.includes('table.dealTo(seat, count)'));
 check('the prompt includes the pack format', prompt.includes('"visibility": "owner"'));
@@ -71,16 +75,18 @@ check('the prompt picked up the chosen shape', prompt.toLowerCase().includes('tr
 await page.screenshot({ path: `${SHOT}/5-editor-prompt.png` });
 
 console.log('\nImporting a hand-written pack');
-await page.click('.editor nav button:has-text("Export")');
-await page.click('button:has-text("Paste a pack")');
+await page.click('.editor-bar button:has-text("Paste")');
 await page.fill('.paste textarea', JSON.stringify(CUSTOM_PACK));
 await page.click('.paste button:has-text("Import")');
 await page.waitForTimeout(600);
-const current = await page.inputValue('textarea.mono');
+await page.click('.editor nav button:has-text("What is on the table")');
+await page.click('summary:has-text("Advanced")');
+await page.waitForTimeout(200);
+const current = await page.inputValue('.editor textarea.mono');
 check('the pack is imported into the editor', current.includes('Quiz Night'));
 
 console.log('\nLoading it onto the live table');
-await page.click('button:has-text("Load onto this table")');
+await page.click('button:has-text("Play it on this table")');
 await page.waitForTimeout(2500);
 const packName = (await page.textContent('.topbar .room .pack'))?.trim();
 check('the table switched to the custom pack', packName === 'Quiz Night', `shows "${packName}"`);
@@ -106,8 +112,7 @@ await page.click('.topbar .icon');
 await page.click('button:has-text("Make your own game")');
 await page.waitForSelector('.editor nav');
 await page.waitForTimeout(400);
-await page.click('.editor nav button:has-text("Export")');
-await page.click('button:has-text("Paste a pack")');
+await page.click('.editor-bar button:has-text("Paste")');
 await page.fill('.paste textarea', JSON.stringify({ manifest: { formatVersion: 99, id: 'x', name: 'x', author: 'x', description: 'x', minSeats: 1, maxSeats: 2, defaultEnforcement: 'off' }, components: [], zones: [], setup: [] }));
 await page.click('.paste button:has-text("Import")');
 await page.waitForTimeout(600);
@@ -115,14 +120,17 @@ await page.waitForTimeout(600);
 // The editor now runs the server's own validator as you type, so a bad pack never
 // reaches the table at all: the reason is on screen and the Load button is dead. The
 // server still validates everything it is sent — see server/test/security.ts.
-const verdict = (await page.textContent('.editor .verdict')) ?? '';
+const verdict = (await page.textContent('.editor-bar .verdict')) ?? '';
 check('the editor flags the problem itself', /problem/i.test(verdict), `verdict: "${verdict}"`);
-const problems = await page.locator('.warn.bad li').allTextContents();
+// A bad import opens the problem list by itself; pressing the verdict toggles it.
+await page.waitForSelector('.editor-problems', { timeout: 5000 });
+const problems = await page.locator('.editor-problems li').allTextContents();
 check('and says what is wrong', problems.some((t) => /version/i.test(t)), JSON.stringify(problems));
-check('loading is blocked', await page.locator('button:has-text("Load onto this table")').isDisabled());
+check('loading is blocked', await page.locator('button:has-text("Play it on this table")').isDisabled());
+await page.click('.editor-problems .icon');
 
 console.log('\nThe draft survives closing the editor');
-await page.click('.editor nav button:has-text("Pieces & zones")');
+await page.click('.editor nav button:has-text("What is on the table")');
 await page.fill('.editor label:has-text("Name") input', 'Draft Keeper');
 await page.waitForTimeout(500);
 await page.click('.editor > header .icon');
@@ -130,18 +138,24 @@ await page.waitForTimeout(500);
 await page.click('.topbar .icon');
 await page.click('button:has-text("Make your own game")');
 await page.waitForSelector('.editor nav');
-await page.click('.editor nav button:has-text("Pieces & zones")');
+await page.click('.editor nav button:has-text("What is on the table")');
 await page.waitForTimeout(400);
 check('the work in progress is still there',
   (await page.inputValue('.editor label:has-text("Name") input')) === 'Draft Keeper');
 
 console.log('\nZones can be placed without hand-editing JSON');
 // Start from the blank pack, which defines a hand each and a play area.
-await page.click('.editor nav button:has-text("Export")');
-await page.click('button:has-text("Start a new pack")');
+await page.click('.editor-bar button:has-text("New")');
 await page.waitForTimeout(500);
-await page.click('.editor nav button:has-text("Pieces & zones")');
+await page.click('.editor nav button:has-text("What is on the table")');
 await page.waitForTimeout(400);
+check('the table map draws one rectangle per zone',
+  (await page.locator('.table-map .map-zone').count()) === 3,
+  `${await page.locator('.table-map .map-zone').count()} drawn`);
+// Dragging on the map is the ordinary way to place a zone; the numbers stay behind a
+// disclosure for the cases it cannot do.
+for (const s of await page.locator('.zone-block details summary').all()) await s.click();
+await page.waitForTimeout(200);
 const geo = await page.locator('.zone-row.sub input[type=number]').count();
 check('zone position and size can be edited in the form', geo >= 4, `${geo} fields`);
 check('setup steps offer the per-seat option',

@@ -1,13 +1,18 @@
 /**
  * Table chat.
  *
- * Sits down the right-hand side. Each player's messages carry their own colour — the
- * same one their pointer and name chip use — so a glance tells you who said what
- * without reading the names.
+ * A floating panel, draggable by its header like the log and the menu. It used to be a
+ * full-height rail pinned to the right-hand edge, which meant opening the log behind it
+ * put the log where it could not be read — the two are most useful together, so neither
+ * may own the corner.
+ *
+ * Each player's messages carry their own colour — the same one their pointer and name
+ * chip use — so a glance tells you who said what without reading the names.
  */
 
 import { useEffect, useRef, useState } from 'react';
 import { useStore } from '../net/store';
+import { usePanelDrag } from './layout';
 
 export function Chat({ open, onClose }: { open: boolean; onClose: () => void }) {
   const chat = useStore((s) => s.snap.chat);
@@ -17,6 +22,7 @@ export function Chat({ open, onClose }: { open: boolean; onClose: () => void }) 
 
   const [draft, setDraft] = useState('');
   const list = useRef<HTMLDivElement>(null);
+  const panel = usePanelDrag('chat');
 
   // Follow new messages, but only when already at the bottom, so reading back through
   // the log is not yanked away by someone else typing.
@@ -38,8 +44,9 @@ export function Chat({ open, onClose }: { open: boolean; onClose: () => void }) 
   }
 
   return (
-    <aside className="chat">
-      <header>
+    <aside className={`chat panel ${panel.className}`} ref={panel.ref} style={panel.style}>
+      <header {...panel.handleProps}>
+        <span className="grip-dots" aria-hidden="true" />
         <span>Chat</span>
         <button className="icon" onClick={onClose} title="Close chat">✕</button>
       </header>

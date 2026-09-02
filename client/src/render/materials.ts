@@ -26,7 +26,9 @@ function memo<T extends THREE.Material | THREE.Material[]>(key: string, make: ()
 
 /** The pale edge of a card or tile, shared by every piece that has one. */
 function edgeMaterial(): THREE.MeshStandardMaterial {
-  return memo('__edge', () => new THREE.MeshStandardMaterial({ color: '#e8e4da', roughness: 0.85 })) as THREE.MeshStandardMaterial;
+  return memo('__edge', () => new THREE.MeshStandardMaterial({
+    color: '#ded9cd', roughness: 0.9, metalness: 0,
+  })) as THREE.MeshStandardMaterial;
 }
 
 export interface PieceLook {
@@ -51,11 +53,27 @@ export function materialsFor(look: PieceLook): THREE.Material | THREE.Material[]
       const up = showFace && front ? front : back;
       const down = showFace && front ? back : (front ?? back);
       const edge = edgeMaterial();
+      /**
+       * The corners are cut by the artwork, not by the mesh.
+       *
+       * Every generated face is painted onto a transparent canvas inside a rounded
+       * rectangle, so the four corners already have zero alpha — they were simply
+       * being ignored. Discarding them turns a deck of hard-cornered rectangles into
+       * a deck of cards, at the cost of one comparison per fragment and with none of
+       * the sort-order trouble real transparency brings. A face with no transparency
+       * anywhere, such as a pack's own bitmap, is unaffected.
+       *
+       * alphaTest also propagates into the shadow pass, so a card's shadow gets the
+       * same rounded corners its face has.
+       */
+      const face = (map: THREE.Texture | null) => new THREE.MeshStandardMaterial({
+        map: map ?? undefined, roughness: 0.62, metalness: 0, alphaTest: 0.5,
+      });
       // BoxGeometry material order: +x, -x, +y, -y, +z, -z
       return [
         edge, edge,
-        new THREE.MeshStandardMaterial({ map: up, roughness: 0.6 }),
-        new THREE.MeshStandardMaterial({ map: down, roughness: 0.6 }),
+        face(up),
+        face(down),
         edge, edge,
       ];
     });
@@ -81,13 +99,17 @@ export function materialsFor(look: PieceLook): THREE.Material | THREE.Material[]
       new THREE.MeshStandardMaterial({ color, roughness: 0.45, metalness: 0.05 }));
   }
 
-  return memo(`${defId}:flat`, () => {
+  return memo(`${defId}:flat:${kind}`, () => {
     const tex = def ? faceTexture(`${def.id}:front`, def.front) : null;
     const color = String(def?.data?.color ?? '#c0392b');
+    // Chips are moulded clay with a sheen; tokens are matte. Sharing one roughness left
+    // a stack of chips reading as painted card.
+    const moulded = kind === 'chip';
     return new THREE.MeshStandardMaterial({
       map: tex ?? undefined,
       color: tex ? '#ffffff' : color,
-      roughness: 0.55,
+      roughness: moulded ? 0.34 : 0.6,
+      metalness: moulded ? 0.06 : 0,
     });
   });
 }

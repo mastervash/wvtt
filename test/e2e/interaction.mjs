@@ -122,7 +122,9 @@ console.log('\nChat');
 
   await a.click('button:has-text("Chat")');
   await b.click('button:has-text("Chat")');
-  await a.waitForSelector('.chat', { timeout: 5000 });
+  // Generous: two software-rendered tables in one browser saturate the main thread,
+  // and a five-second wait could not get scheduled even with the panel already open.
+  await a.waitForSelector('.chat', { timeout: 20000 });
   await a.fill('.chat-input input', 'anyone for a game?');
   await a.click('.chat-input button');
   await a.waitForTimeout(1000);
@@ -137,7 +139,46 @@ console.log('\nChat');
 
   const colours = await a.$$eval('.chat-line .who', (els) => els.map((e) => getComputedStyle(e).color));
   check('each player has their own colour', new Set(colours).size === 2, colours.join(' / '));
+
+  // A closed chat has to say that something arrived, or a table talks past itself.
+  await a.click('.chat > header .icon');
+  await a.waitForTimeout(300);
+  check('closing the chat clears the count', (await a.locator('.topbar .badge').count()) === 0);
+  await b.fill('.chat-input input', 'still there?');
+  await b.click('.chat-input button');
+  await a.waitForTimeout(1200);
+  check('a message arriving while the chat is shut raises a badge',
+    (await a.textContent('.topbar .badge')) === '1',
+    await a.locator('.topbar .badge').count() ? await a.textContent('.topbar .badge') : 'no badge');
+  await a.click('button:has-text("Chat")');
+  await a.waitForTimeout(400);
+  check('opening it again clears the badge', (await a.locator('.topbar .badge').count()) === 0);
+
   await a.screenshot({ path: `${SHOT}/11-chat.png` });
+
+  /* The chat and the log used to fight over the right-hand edge. Both are open here,
+     and either can be dragged somewhere else by its title bar. */
+  await a.click('button:has-text("Log")');
+  await a.waitForTimeout(400);
+  const chatBox = await a.locator('.chat').boundingBox();
+  const logBox = await a.locator('.log').boundingBox();
+  const overlap = !(chatBox.x + chatBox.width <= logBox.x || logBox.x + logBox.width <= chatBox.x
+    || chatBox.y + chatBox.height <= logBox.y || logBox.y + logBox.height <= chatBox.y);
+  check('the chat and the log do not cover each other', !overlap,
+    `chat ${JSON.stringify(chatBox)} log ${JSON.stringify(logBox)}`);
+
+  await a.mouse.move(chatBox.x + 60, chatBox.y + 14);
+  await a.mouse.down();
+  await a.mouse.move(chatBox.x - 240, chatBox.y - 120, { steps: 12 });
+  await a.mouse.up();
+  await a.waitForTimeout(400);
+  const movedBox = await a.locator('.chat').boundingBox();
+  check('a panel can be dragged by its title bar',
+    Math.abs(movedBox.x - chatBox.x) > 100, `moved ${Math.round(movedBox.x - chatBox.x)}px`);
+  check('and the move is remembered',
+    await a.evaluate(() => !!JSON.parse(localStorage.getItem('wvtt:panels') || '{}').chat));
+
+  await a.screenshot({ path: `${SHOT}/11b-panels-moved.png` });
   await a.close();
   await b.close();
 }

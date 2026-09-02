@@ -19,13 +19,15 @@ bottom](docs/images/table.png)
 | ![The table log, showing each player's actions in their own colour](docs/images/log.png) | ![The dice tray, thirteen dice with their rolled values on billboards above them](docs/images/dice.png) |
 | **Who did what.** Every action lands in the log with the name and colour of whoever did it, filterable by category. It never names a card that is not already common knowledge — a face-down card is "a card", even in the line about the player who moved it. | **Dice you can read.** The value is drawn on a billboard above the die rather than painted on it: a number stretched across a polyhedron's UVs cannot be read from any angle. Rolls happen on the server, so nobody can nudge one. |
 
-![The pack editor, with a game described in prose and the generated prompt below
-it](docs/images/editor.png)
+![The game maker: three numbered steps for describing a game, with the pack's verdict
+and a Play it on this table button pinned along the bottom](docs/images/editor.png)
 
-**Make your own game.** Describe it, and the editor writes a prompt containing the whole
-pack format and script API for you to paste into any AI assistant. Paste the JSON back
-and it validates as you type — the same checks the server runs — before it will let you
-load it onto the table.
+**Make your own game.** Three steps: say what the game is, copy the generated prompt into
+any AI assistant, paste the pack it writes back. The prompt carries the whole pack format
+and script API, so the assistant needs nothing else. What comes back validates as you
+type — the same checks the server runs — and the bar along the bottom says whether it
+will load and puts it on the table in one press. Zones are placed by dragging them on a
+map of the table; the raw JSON is still there, folded away, for anyone who wants it.
 
 ## Run your own
 
