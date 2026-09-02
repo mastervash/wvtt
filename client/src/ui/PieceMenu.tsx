@@ -15,6 +15,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import type { ComponentDef, Op } from '@wvtt/shared';
 import { useStore, useMySeat } from '../net/store';
 import { useSettings } from './settings';
+import { DIE_COLORS, defaultDieColor } from '../render/faces';
 
 interface Action {
   label: string;
@@ -26,6 +27,8 @@ interface Action {
   counts?: { max: number; make: (n: number) => Op };
   /** Seats offered in a submenu, for "deal to just this player". */
   seats?: { seat: number; name: string; make: (seat: number) => Op }[];
+  /** Colour swatches offered in a submenu, for tinting a die. */
+  colors?: { current: string; make: (id: string) => Op };
   /** Renders the pile naming form instead of a button. */
   form?: 'name';
   danger?: boolean;
@@ -196,6 +199,16 @@ export function PieceMenu() {
         op: { t: 'roll', target: piece.id },
         disabled: locked ? 'Unlock it first' : undefined,
       });
+      // Which die is whose is settled by colour at a real table, and a tray of
+      // identical white dice gives nobody anything to say.
+      actions.push({
+        label: 'Colour…',
+        colors: {
+          current: piece.tint || defaultDieColor(sides),
+          make: (id) => ({ t: 'setTint', target: piece.id, tint: id }),
+        },
+        disabled: locked ? 'Unlock it first' : undefined,
+      });
     } else {
       actions.push({
         label: piece.faceUp ? 'Turn face down' : 'Turn face up',
@@ -280,7 +293,7 @@ export function PieceMenu() {
       </div>
 
       {actions.map((a) => {
-        const expandable = !!a.counts || !!a.seats || a.form === 'name';
+        const expandable = !!a.counts || !!a.seats || !!a.colors || a.form === 'name';
         const expanded = openSub === a.label;
         return (
           <div key={a.label} className="pm-item">
@@ -312,6 +325,21 @@ export function PieceMenu() {
                   <button key={s.seat} onClick={() => run(s.make(s.seat))}>
                     {s.name} <span className="pm-seatno">seat {s.seat + 1}</span>
                   </button>
+                ))}
+              </div>
+            )}
+
+            {expanded && a.colors && (
+              <div className="pm-colors">
+                {DIE_COLORS.map((c) => (
+                  <button
+                    key={c.id}
+                    className={`pm-swatch ${a.colors!.current === c.id ? 'on' : ''}`}
+                    style={{ background: c.body }}
+                    title={c.label}
+                    aria-label={c.label}
+                    onClick={() => run(a.colors!.make(c.id))}
+                  />
                 ))}
               </div>
             )}

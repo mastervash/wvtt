@@ -23,6 +23,8 @@ export interface PieceSnapshot {
   face: string; value: number;
   /** Optional so snapshots written before locking existed still load. */
   locked?: boolean;
+  /** Optional so snapshots written before pieces could be coloured still load. */
+  tint?: string;
 }
 
 export interface StackSnapshot {

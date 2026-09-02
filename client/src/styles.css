@@ -504,6 +504,7 @@ label.check input[type="checkbox"] { width: auto; flex: 0 0 auto; margin: 0; }
 /* The rolled value, shown on a billboard above the die rather than painted onto it —
    a number on a polyhedron's stretched UVs cannot be read from any angle. */
 .die-value {
+  display: flex; align-items: baseline; gap: 5px;
   font: 700 19px/1.1 system-ui, sans-serif; color: #fff;
   background: linear-gradient(#232b35f2, #12161bf2);
   border: 1.5px solid #ffffff5c;
@@ -512,6 +513,7 @@ label.check input[type="checkbox"] { width: auto; flex: 0 0 auto; margin: 0; }
   box-shadow: inset 0 1px 0 #ffffff1f, 0 6px 18px #000000a0;
   user-select: none; white-space: nowrap;
 }
+.die-kind { font-size: 11px; font-weight: 600; color: #ffffff8f; }
 
 .ping-name {
   font: 700 11px system-ui, sans-serif; color: #06131a;
@@ -726,6 +728,23 @@ select {
   background: var(--panel-2); border: 1px solid var(--line); border-radius: 7px;
   font-variant-numeric: tabular-nums;
 }
+/* Colour swatches. Round, because a die is not a rectangle and the swatch should read
+   as "the colour of the thing" rather than as another button. */
+.pm-colors { display: flex; flex-wrap: wrap; gap: 6px; padding: 4px 8px 10px; }
+.pm-swatch {
+  width: 26px; height: 26px; padding: 0; border-radius: 999px;
+  border: 2px solid #ffffff2b;
+  box-shadow: inset 0 2px 4px #ffffff33, inset 0 -2px 5px #00000059, var(--lift-1);
+  transition: transform var(--snap), border-color var(--snap);
+}
+.pm-swatch:hover:not(:disabled) { transform: scale(1.12); border-color: #ffffff80; }
+/* The current colour keeps the ring rather than the global button.on fill, which would
+   paint over the very thing the swatch exists to show. */
+.pm-swatch.on {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px var(--accent-dim), inset 0 2px 4px #ffffff33, inset 0 -2px 5px #00000059;
+}
+
 .pm-seats { display: flex; flex-direction: column; gap: 3px; padding: 2px 8px 8px; }
 .pm-seats button { padding: 7px 9px; background: var(--panel-2); border: 1px solid var(--line); }
 .pm-seatno { color: var(--muted); font-size: 11px; }

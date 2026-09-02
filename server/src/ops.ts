@@ -50,6 +50,15 @@ const STACKABLE = new Set(['card', 'chip', 'tile']);
 /** How close a drop has to land before it counts as "on top of" something. */
 const SNAP_RADIUS = 0.34;
 
+/**
+ * Colours a piece may be tinted.
+ *
+ * Kept in step with DIE_COLORS in the client's faces.ts. Deliberately a closed list:
+ * the value is rendered by every other client, and an open string field is one that
+ * eventually carries something that is not a colour.
+ */
+const TINTS = new Set(['bone', 'red', 'orange', 'yellow', 'green', 'blue', 'purple', 'black']);
+
 /** Reject absurd coordinates so a malicious client cannot fling a card to infinity. */
 const LIMIT = 40;
 const sane = (n: unknown): n is number =>
@@ -589,8 +598,24 @@ export function applyOp(ctx: OpContext, op: Op): OpResult {
       piece.secret.value = value;
       piece.faceUp = true;
       piece.rotY = Math.random() * Math.PI * 2;
+      // Says a roll happened, which the value cannot: rolling the same number twice
+      // running would otherwise be indistinguishable from the die never moving, and
+      // the tumble on every client is driven off this.
+      piece.rollSeq = (piece.rollSeq + 1) % 100000;
       pushLog(state, `rolled a d${sides} and got ${value}.`, actor(ctx, 'dice'));
       return OK_VIS;
+    }
+
+    case 'setTint': {
+      const piece = state.pieces.get(op.target);
+      if (!piece) return fail('no piece');
+      if (piece.locked) return fail('that is locked in place');
+      // A closed set, checked here rather than trusted from the client: this string is
+      // handed to every other player's renderer.
+      const tint = String(op.tint ?? '');
+      if (tint && !TINTS.has(tint)) return fail('unknown colour');
+      piece.tint = tint;
+      return OK;
     }
 
     default:

@@ -11,7 +11,9 @@ import * as THREE from 'three';
 import type { ComponentDef } from '@wvtt/shared';
 import type { Snapshot } from '../net/store';
 import { materialsFor } from './materials';
-import { cardGeometry, chipGeometry, dieGeometry, tokenGeometry, tileGeometry, chessGeometry } from './geometry';
+import { cardGeometry, chipGeometry, tokenGeometry, tileGeometry, chessGeometry } from './geometry';
+import { dieShape } from './dice';
+import { Die } from './Die';
 
 type PieceData = Snapshot['pieces'][string];
 
@@ -30,6 +32,9 @@ interface Props {
   /** Under the pointer, and therefore what a keyboard shortcut would act on. */
   hovered: boolean;
   onPointerDown: (e: any, id: string) => void;
+  /** The drag handlers, which have to live on the piece itself. See Table.tsx. */
+  onPointerMove?: (e: any) => void;
+  onPointerUp?: (e: any) => void;
   onPointerOver?: (e: any, id: string) => void;
   onPointerOut?: (e: any, id: string) => void;
   onContextMenu?: (e: any) => void;
@@ -46,12 +51,13 @@ const BASE_LIFT = 0.008;
 
 function PieceBase({
   piece, def, heldByOther, selected, hovered, readable, shadows,
-  onPointerDown, onPointerOver, onPointerOut, onContextMenu,
+  onPointerDown, onPointerMove, onPointerUp, onPointerOver, onPointerOut, onContextMenu,
 }: Props) {
   const group = useRef<THREE.Group>(null);
 
   const materials = materialsFor({
     def,
+    tint: piece.tint ?? '',
     kind: def?.kind ?? piece.kind,
     // A card in a hand you do not own is drawn face down whatever its flag says. The
     // server sets faceUp on cards entering a hand so their owner can read them off the
@@ -67,7 +73,7 @@ function PieceBase({
       case 'tile': return tileGeometry(def?.w, def?.h, def?.d);
       case 'chip': return chipGeometry((def?.w ?? 0.32) / 2, def?.d ?? 0.045);
       case 'token': return tokenGeometry((def?.w ?? 0.28) / 2, def?.d ?? 0.12);
-      case 'die': return dieGeometry(def?.sides ?? 6);
+      case 'die': return dieShape(def?.sides ?? 6).geometry;
       case 'piece': return chessGeometry(String(def?.data?.piece ?? 'p'));
       default: return cardGeometry();
     }
@@ -79,21 +85,28 @@ function PieceBase({
   const kind = def?.kind ?? piece.kind;
   // Flat pieces sit on the table; upright pieces are modelled from their base.
   const flat = kind === 'card' || kind === 'tile';
-  const yOffset = flat ? (def?.d ?? 0.006) / 2 : 0;
+  const isDie = kind === 'die';
+  /**
+   * How far to lift the mesh so it rests ON the felt rather than through it.
+   *
+   * Asked of the geometry rather than kept as a table of per-kind constants, because
+   * the constants were wrong for anything the author had not thought about. A card is
+   * modelled about its middle and a chess piece from its base, which the old two-case
+   * rule got right; a die and a chip are modelled about their centres, which it did
+   * not, so both sat buried to the waist in the table until somebody picked them up.
+   * The bounding box knows how far below the origin a shape reaches, for every kind
+   * there is and every kind a pack invents later.
+   */
+  const yOffset = useMemo(() => {
+    geometry.computeBoundingBox();
+    return Math.max(0, -(geometry.boundingBox?.min.y ?? 0));
+  }, [geometry]);
   // A held card tips towards the person holding it, the way one does in a real hand.
   // Height alone reads as "floating"; the tilt is what reads as "picked up".
   const tilt = held && flat ? HELD_TILT : 0;
 
-  return (
-    <group
-      ref={group}
-      position={[piece.x, y + yOffset, piece.z]}
-      rotation={[tilt, piece.rotY, 0]}
-      onPointerDown={(e) => onPointerDown(e, piece.id)}
-      onPointerOver={(e) => onPointerOver?.(e, piece.id)}
-      onPointerOut={(e) => onPointerOut?.(e, piece.id)}
-      onContextMenu={onContextMenu}
-    >
+  const body = (
+    <>
       <mesh
         geometry={geometry}
         material={materials as THREE.Material | THREE.Material[]}
@@ -118,6 +131,36 @@ function PieceBase({
             depthWrite={false}
           />
         </mesh>
+      )}
+    </>
+  );
+
+  return (
+    <group
+      ref={group}
+      position={[piece.x, y + yOffset, piece.z]}
+      onPointerDown={(e) => onPointerDown(e, piece.id)}
+      onPointerMove={onPointerMove}
+      onPointerUp={onPointerUp}
+      onPointerOver={(e) => onPointerOver?.(e, piece.id)}
+      onPointerOut={(e) => onPointerOut?.(e, piece.id)}
+      onContextMenu={onContextMenu}
+    >
+      {/* A die owns its own orientation: it has to land with the rolled number facing
+          up, and it gets there by tumbling rather than by snapping. Everything else
+          takes the rotation straight from the table. */}
+      {isDie ? (
+        <Die
+          sides={def?.sides ?? 6}
+          value={piece.secret?.value ?? 1}
+          rollSeq={piece.rollSeq ?? 0}
+          spin={piece.rotY}
+          settled={!held}
+        >
+          {body}
+        </Die>
+      ) : (
+        <group rotation={[tilt, piece.rotY, 0]}>{body}</group>
       )}
     </group>
   );
@@ -156,6 +199,8 @@ function samePiece(a: Props, b: Props): boolean {
     && p.zoneId === q.zoneId
     && p.heldBy === q.heldBy
     && p.locked === q.locked
+    && p.tint === q.tint
+    && p.rollSeq === q.rollSeq
     && p.secret?.face === q.secret?.face
     && p.secret?.value === q.secret?.value;
 }

@@ -49,6 +49,24 @@ export function recenterCamera(): void {
  * keyboard shortcuts read it to ping the spot you are looking at.
  */
 const pointerRef = { current: { x: 0, z: 0 } };
+/**
+ * The die currently in somebody's hand, for the shake-to-roll listener.
+ *
+ * A module slot rather than a component ref, like recenterRef above and for the same
+ * reason: in development the scene is mounted more than once, so the ref written by the
+ * pointer handler and the ref read by the window listener were two different objects
+ * and the listener never saw a die at all.
+ */
+const heldDieRef: { current: string | null } = { current: null };
+
+/**
+ * Running tally for shake-to-roll.
+ *
+ * Module scope for the same reason as the slot above: the scene mounts more than once
+ * in development, and a tally living in the effect's closure was rebuilt faster than a
+ * shake could accumulate — every reversal was counted against a fresh zero.
+ */
+const shakeState = { dir: 0, reversals: 0, lastAt: 0, lastX: 0, rolledAt: 0 };
 /** The same position in screen pixels, for anchoring the menu to the pointer. */
 const pointerScreenRef = { current: { x: 0, y: 0 } };
 
@@ -69,9 +87,13 @@ export function getPointerScreen(): { x: number; y: number } {
  */
 function installProjector(camera: THREE.Camera, width: number, height: number) {
   if (!import.meta.env.DEV) return;
-  (window as unknown as { __wvttProject?: (x: number, z: number) => { x: number; y: number } })
-    .__wvttProject = (x: number, z: number) => {
-      const v = new THREE.Vector3(x, 0.1, z).project(camera);
+  (window as unknown as {
+    __wvttProject?: (x: number, z: number, y?: number) => { x: number; y: number };
+  }).__wvttProject = (x: number, z: number, y = 0.1) => {
+      // The height matters for anything that is not flat. A die stands well above the
+      // felt, so aiming a test at the felt under it lands beside the die rather than
+      // on it — which made pointer tests on dice miss at random.
+      const v = new THREE.Vector3(x, y, z).project(camera);
       return {
         x: Math.round(((v.x + 1) / 2) * width),
         y: Math.round(((1 - v.y) / 2) * height),
@@ -384,6 +406,7 @@ function Scene() {
       slop: e.pointerType === 'mouse' ? 6 : 14,
       mode: piece.stackId ? 'undecided' : 'loose',
     };
+    heldDieRef.current = (defs.get(piece.defId)?.kind ?? piece.kind) === 'die' ? targetId : null;
     setDragging(targetId);
     send({ t: 'grab', target: targetId });
     if (controls.current) controls.current.enabled = false;
@@ -466,6 +489,7 @@ function Scene() {
 
   function onPointerUp(e: ThreeEvent<PointerEvent>) {
     cancelLongPress();
+    heldDieRef.current = null;
     if (menuPending.current) {
       openMenu(menuPending.current);
       menuPending.current = null;
@@ -504,6 +528,60 @@ function Scene() {
     if (p) send({ t: 'drop', target: g.id, zoneId: null, x: p.x, z: p.z });
     else send({ t: 'release', target: g.id });
   }
+
+  /**
+   * Shaking a held die rolls it.
+   *
+   * Off the window rather than off the scene's own pointer events, because those go to
+   * whichever object the ray happens to hit — and a die being shaken passes over its
+   * own mesh, the felt and its neighbours several times a second. A shake is a property
+   * of the pointer, not of whatever is under it.
+   *
+   * One listener for the life of the scene, reading which die is in hand from a ref.
+   * Re-attaching it whenever that changed meant re-attaching it several times a second,
+   * because the value is derived from a snapshot that is rebuilt that often — and the
+   * running tally went with it every time.
+   *
+   * A shake is direction reversals, not distance: dragging a die across the table is
+   * one long sweep, while shaking it turns the pointer back on itself again and again.
+   * The tally lapses only when the pointer actually stops, which is what separates a
+   * shake from a slow wander; a fixed time window turned out to reset the count mid
+   * gesture and it never reached four.
+   */
+
+  useEffect(() => {
+    const sh = shakeState;
+
+    const onMove = (e: PointerEvent) => {
+      const die = heldDieRef.current;
+      const now = performance.now();
+      const dx = e.clientX - sh.lastX;
+      sh.lastX = e.clientX;
+      // Nothing in hand: note where the pointer is and wait. Clearing the tally here
+      // would let one stray frame without a die undo a shake in progress.
+      if (!die) return;
+      // Below this the pointer is drifting, not being shaken.
+      if (Math.abs(dx) < 7) return;
+
+      // A pause means whatever was happening has finished.
+      if (now - sh.lastAt > 400) { sh.dir = 0; sh.reversals = 0; }
+      sh.lastAt = now;
+
+      const next = Math.sign(dx);
+      if (sh.dir !== 0 && next !== sh.dir) sh.reversals += 1;
+      sh.dir = next;
+
+      // One roll per shake, with a pause after, or a long rattle fires a dozen.
+      if (sh.reversals >= 4 && now - sh.rolledAt > 900) {
+        sh.reversals = 0;
+        sh.rolledAt = now;
+        send({ t: 'roll', target: die });
+      }
+    };
+
+    window.addEventListener('pointermove', onMove);
+    return () => window.removeEventListener('pointermove', onMove);
+  }, [send]);
 
   const pieces = Object.values(snap.pieces);
 
@@ -555,6 +633,15 @@ function Scene() {
             readable={canRead(snap, p, mySeat)}
             selected={dragging === p.id || (!!p.stackId && dragging === p.stackId)}
             onPointerDown={onPiecePointerDown}
+            /* A piece needs these itself, not only on the group around it. React Three
+               Fiber delivers an event to the NEAREST ancestor carrying handlers, so a
+               piece with its own onPointerDown shadows the group's onPointerMove
+               entirely — dragging only worked while the pointer happened to be over
+               bare felt beside the piece. A card slides out from under the pointer
+               often enough to hide that; a die is tall and stays under it, so dice
+               could not be dragged at all. */
+            onPointerMove={onPointerMove}
+            onPointerUp={onPointerUp}
             hovered={hovered === (p.stackId || p.id)}
             onPointerOver={(e: ThreeEvent<PointerEvent>, id: string) => {
               e.stopPropagation();
@@ -578,7 +665,7 @@ function Scene() {
       <FrameWatch />
       <HoverRing snap={snap} hovered={hovered} />
       <StackLabels snap={snap} />
-      <DiceLabels snap={snap} defs={defs} />
+      <DiceLabels snap={snap} defs={defs} hovered={hovered} />
       <Pings />
       <Cursors snap={snap} sessionId={sessionId} />
     </>
@@ -720,39 +807,41 @@ function StackLabels({ snap }: { snap: Snapshot }) {
 }
 
 /**
- * The number showing on each die, drawn as a billboard rather than on the mesh.
+ * The number on the die the pointer is over.
  *
- * Painting the value onto a polyhedron is what the app used to do, and it was
- * unreadable: one texture stretched across every face of an icosahedron, at a size
- * chosen for a table seen from two metres away. A billboard always faces the camera,
- * never shears, and stays legible on a phone.
+ * This used to be drawn over every die on the table, because the dice themselves
+ * carried no numbers at all — one texture stretched across an icosahedron's default UVs
+ * is unreadable, so the value floated overhead instead. The dice are properly unwrapped
+ * and numbered now, and thirteen permanent billboards over a dice tray turned out to
+ * hide the very thing they were labelling.
+ *
+ * One is still worth keeping. A d20 seen edge-on across a table is small, and a label
+ * on the die you are pointing at costs nothing and settles "which number is up".
  */
-function DiceLabels({ snap, defs }: { snap: Snapshot; defs: Map<string, ComponentDef> }) {
+function DiceLabels({ snap, defs, hovered }: {
+  snap: Snapshot;
+  defs: Map<string, ComponentDef>;
+  hovered: string | null;
+}) {
+  if (!hovered) return null;
+  const p = snap.pieces[hovered];
+  if (!p) return null;
+  const def = defs.get(p.defId);
+  const kind = def?.kind ?? p.kind;
+  if (kind !== 'die') return null;
+  const value = p.secret?.value;
+  if (!value) return null;
+  const sides = def?.sides ?? 6;
   return (
-    <>
-      {Object.values(snap.pieces).map((p) => {
-        const kind = defs.get(p.defId)?.kind ?? p.kind;
-        if (kind !== 'die') return null;
-        const value = p.secret?.value;
-        if (!value) return null;
-        const sides = defs.get(p.defId)?.sides ?? 6;
-        return (
-          <Html
-            key={p.id}
-            position={[p.x, p.y + 0.42, p.z]}
-            center
-            distanceFactor={7}
-            zIndexRange={LABEL_Z}
-            style={{ pointerEvents: 'none' }}
-          >
-            {/* Just the number. The die's kind is in the tooltip and in the log:
-                spelling out "d20" beside every value doubles the label's width, and
-                a tray of thirteen dice then reads as one solid bar. */}
-            <div className="die-value" title={`d${sides}`}>{value}</div>
-          </Html>
-        );
-      })}
-    </>
+    <Html
+      position={[p.x, p.y + 0.62, p.z]}
+      center
+      distanceFactor={7}
+      zIndexRange={LABEL_Z}
+      style={{ pointerEvents: 'none' }}
+    >
+      <div className="die-value">{sides === 100 ? `${value}` : value}<span className="die-kind">d{sides}</span></div>
+    </Html>
   );
 }
 

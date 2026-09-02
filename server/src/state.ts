@@ -49,6 +49,20 @@ export class Piece extends Schema {
   declare heldBy: string;    // '' when not held
   /** Pinned to the table: no move, flip or draw touches it until it is unlocked. */
   declare locked: boolean;
+  /**
+   * Colour chosen for this piece, or '' for whatever its pack says.
+   *
+   * Public, unlike the identity: which die is the red one is exactly the sort of thing
+   * players say out loud, and hiding it would make the table harder to talk about.
+   */
+  declare tint: string;
+  /**
+   * Bumped on every roll.
+   *
+   * The value alone cannot drive the tumbling animation, because rolling a 4 twice in
+   * a row would look like nothing happened. This is what says a roll occurred.
+   */
+  declare rollSeq: number;
   declare secret: Secret;
 }
 defineTypes(Piece, {
@@ -56,6 +70,7 @@ defineTypes(Piece, {
   x: 'number', y: 'number', z: 'number', rotY: 'number',
   faceUp: 'boolean', stackId: 'string', order: 'number',
   zoneId: 'string', heldBy: 'string', locked: 'boolean',
+  tint: 'string', rollSeq: 'number',
   secret: Secret,
 });
 // Gate the identity behind per-client visibility. Must come after defineTypes.

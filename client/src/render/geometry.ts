@@ -32,26 +32,8 @@ export function tileGeometry(w = 0.4, h = 0.6, d = 0.12) {
   return memo(`tile:${w}:${h}:${d}`, () => new THREE.BoxGeometry(w, d, h));
 }
 
-/**
- * Dice use the platonic solid that matches their face count where one exists.
- *
- * Sized larger than the original 0.15: a d20 at that scale was a speck on a phone, and
- * the rolled value floating over it (see DiceLabels) needs something under it big
- * enough to look like the thing it is labelling.
- */
-export function dieGeometry(sides: number, size = 0.22) {
-  return memo(`die:${sides}:${size}`, () => {
-    switch (sides) {
-      case 4: return new THREE.TetrahedronGeometry(size * 1.3);
-      case 6: return new THREE.BoxGeometry(size * 1.7, size * 1.7, size * 1.7);
-      case 8: return new THREE.OctahedronGeometry(size * 1.3);
-      case 12: return new THREE.DodecahedronGeometry(size * 1.2);
-      case 20: return new THREE.IcosahedronGeometry(size * 1.25);
-      // d10 and d100 have no platonic form; a bipyramid-ish octahedron reads correctly.
-      default: return new THREE.OctahedronGeometry(size * 1.25);
-    }
-  });
-}
+// Dice live in dice.ts: their solids have to be unwrapped and numbered, and the code
+// that does that also has to know where each face points so a roll can land on it.
 
 /**
  * Chess pieces built from stacked primitives. Deliberately abstract rather than

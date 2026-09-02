@@ -23,6 +23,28 @@ export function thicknessOf(kind: string): number {
 }
 
 /**
+ * Smallest gap a kind needs when a pack lays several of them out side by side.
+ *
+ * One spacing for everything was fine while everything was a card. A polyhedral set is
+ * two thirds of a unit across, so a dice tray laid out on card spacing came out as a
+ * heap of dice growing through one another.
+ *
+ * Only kinds that need MORE room than a card are listed, and the caller keeps its own
+ * default for everything else. Widening the gap for every kind changes where a pack's
+ * cards land, which is load-bearing: several built-ins position a discard by dropping a
+ * card near a pile and letting it snap, and a few hundredths of a unit is the
+ * difference between snapping and not.
+ */
+const KIND_SPACING: Record<string, { x: number; z: number }> = {
+  die: { x: 0.85, z: 0.85 },
+};
+
+function spacingOf(kind: string, x: number, z: number): { x: number; z: number } {
+  const need = KIND_SPACING[kind];
+  return need ? { x: Math.max(x, need.x), z: Math.max(z, need.z) } : { x, z };
+}
+
+/**
  * Smallest vertical gap that reliably separates two flat pieces on screen.
  *
  * Cards are 6mm thick at table scale and a laid-out hand used to step them by 1mm,
@@ -140,6 +162,8 @@ function newPiece(def: ComponentDef, faceUp: boolean): Piece {
   p.order = 0;
   p.zoneId = '';
   p.heldBy = '';
+  p.tint = '';
+  p.rollSeq = 0;
   const s = new Secret();
   s.face = def.face ?? def.id;
   s.value = def.kind === 'die' ? rollDie(def.sides ?? 6) : 0;
@@ -228,8 +252,9 @@ function applyPlacement(
   const cols = placement.gridCols ?? Math.ceil(Math.sqrt(pieces.length));
   pieces.forEach((p, i) => {
     if (placement.as === 'grid') {
-      p.x = baseX + (i % cols) * 0.5;
-      p.z = baseZ + Math.floor(i / cols) * 0.5;
+      const gap = spacingOf(p.kind, 0.5, 0.5);
+      p.x = baseX + (i % cols) * gap.x;
+      p.z = baseZ + Math.floor(i / cols) * gap.z;
     } else {
       // 'loose': spread them out so a handful of dice is not one invisible cube. Past
       // half a dozen they wrap into rows rather than marching off the end of the tray —
@@ -241,8 +266,9 @@ function applyPlacement(
       const row = Math.floor(i / perRow);
       // The last row may be short; centre each row on its own count.
       const inThisRow = Math.min(perRow, pieces.length - row * perRow);
-      p.x = baseX + (col - (inThisRow - 1) / 2) * 0.55;
-      p.z = baseZ + (row - (rows - 1) / 2) * 0.6;
+      const gap = spacingOf(p.kind, 0.55, 0.6);
+      p.x = baseX + (col - (inThisRow - 1) / 2) * gap.x;
+      p.z = baseZ + (row - (rows - 1) / 2) * gap.z;
     }
     p.y = 0;
     p.zoneId = zoneId;

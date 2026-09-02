@@ -80,6 +80,10 @@ export interface PieceState {
   heldBy: string | null;
   /** Pinned in place: refuses to be moved, flipped or taken until unlocked. */
   locked?: boolean;
+  /** Colour chosen for this piece, or '' for whatever the pack says. Public. */
+  tint?: string;
+  /** Bumped on every roll, so a die can be seen to tumble even onto the same value. */
+  rollSeq?: number;
 }
 
 export interface StackState {
@@ -132,6 +136,7 @@ export type Op =
   | { t: 'unpeek'; target: string }
   | { t: 'reveal'; target: string }
   | { t: 'roll'; target: string }
+  | { t: 'setTint'; target: string; tint: string }
   | { t: 'sit'; seat: number }
   | { t: 'stand' }
   | { t: 'rename'; name: string }

@@ -11,6 +11,7 @@
 
 import * as THREE from 'three';
 import type { FaceSource } from '@wvtt/shared';
+import { atlasGrid, FACE_FILL } from './dice';
 
 const cache = new Map<string, THREE.Texture>();
 
@@ -351,34 +352,141 @@ function drawBlank(color: string): HTMLCanvasElement {
 }
 
 /**
- * The body of an unrolled die.
+ * The colours a die can be, offered in its context menu.
  *
- * Deliberately plain. Text painted here is stretched across every face of a
- * polyhedron by the UV mapping, so it can never be read reliably; the die's value is
- * shown on a billboard above it instead. What this needs to do is look like a die and
- * stay distinguishable at a glance, which a tinted body with a subtle edge does.
+ * Named rather than free-form: a colour picker on a table gives you a die nobody else
+ * can describe out loud, and "the red d20" is how dice are actually referred to. The
+ * body colour is what the atlas is painted on; the pips are chosen to stay legible
+ * against it.
  */
-const DIE_TINTS: Record<number, string> = {
-  4: '#e9dcc0', 6: '#f2efe6', 8: '#d8e3ef', 10: '#e7dcef',
-  12: '#dcefe1', 20: '#efdcdc', 100: '#e2e2ea',
+export const DIE_COLORS: { id: string; label: string; body: string; ink: string }[] = [
+  { id: 'bone', label: 'Bone', body: '#f2efe6', ink: '#1d1d22' },
+  { id: 'red', label: 'Red', body: '#c0392b', ink: '#fdf3f1' },
+  { id: 'orange', label: 'Orange', body: '#d2751f', ink: '#fff6ec' },
+  { id: 'yellow', label: 'Yellow', body: '#e0b02a', ink: '#241d05' },
+  { id: 'green', label: 'Green', body: '#2f8b57', ink: '#f0fbf4' },
+  { id: 'blue', label: 'Blue', body: '#2f6fb8', ink: '#f1f7ff' },
+  { id: 'purple', label: 'Purple', body: '#7a4fa8', ink: '#f8f2ff' },
+  { id: 'black', label: 'Black', body: '#26262c', ink: '#f0f0f4' },
+];
+
+export function dieColor(id: string | undefined) {
+  return DIE_COLORS.find((c) => c.id === id) ?? DIE_COLORS[0];
+}
+
+/** The colour a die is by default, when its pack has not said and nobody has chosen. */
+const DEFAULT_DIE_COLOR: Record<number, string> = {
+  4: 'yellow', 6: 'bone', 8: 'blue', 10: 'purple', 12: 'green', 20: 'red', 100: 'black',
 };
 
-function drawDieFace(sides: number): HTMLCanvasElement {
-  const [c, ctx] = canvas(128, 128);
-  const tint = DIE_TINTS[sides] ?? '#f2efe6';
-  // The UVs stretch this across every face, so it must survive being smeared: a
-  // centre-bright gradient still reads as a bevelled face wherever it lands, whereas
-  // a flat fill leaves the solid looking like untextured plastic.
-  const g = ctx.createRadialGradient(52, 46, 6, 64, 64, 84);
-  g.addColorStop(0, shade(tint, 0.35));
-  g.addColorStop(0.6, tint);
-  g.addColorStop(1, shade(tint, -0.22));
-  ctx.fillStyle = g;
-  ctx.fillRect(0, 0, 128, 128);
-  ctx.strokeStyle = 'rgba(0,0,0,0.35)';
-  ctx.lineWidth = 8;
-  ctx.strokeRect(0, 0, 128, 128);
-  return c;
+export function defaultDieColor(sides: number): string {
+  return DEFAULT_DIE_COLOR[sides] ?? 'bone';
+}
+
+/** The classic pip layout, in fractions of a face. */
+const PIPS: Record<number, [number, number][]> = {
+  1: [[0.5, 0.5]],
+  2: [[0.3, 0.3], [0.7, 0.7]],
+  3: [[0.28, 0.28], [0.5, 0.5], [0.72, 0.72]],
+  4: [[0.3, 0.3], [0.7, 0.3], [0.3, 0.7], [0.7, 0.7]],
+  5: [[0.28, 0.28], [0.72, 0.28], [0.5, 0.5], [0.28, 0.72], [0.72, 0.72]],
+  6: [[0.3, 0.26], [0.7, 0.26], [0.3, 0.5], [0.7, 0.5], [0.3, 0.74], [0.7, 0.74]],
+};
+
+/**
+ * The numbered faces of a die, as one texture.
+ *
+ * One cell per face, laid out to match the UVs generated in dice.ts — the two have to
+ * agree about the grid, so both ask atlasGrid() rather than each working it out.
+ *
+ * A d6 gets pips, because that is what a six-sided die has; everything else gets a
+ * numeral, because twenty pips is not a die face. Numerals that can be read upside
+ * down are underlined, the way real dice mark them.
+ */
+export function dieAtlasTexture(
+  sides: number,
+  cells: { label: string; fit: number }[],
+  colorId: string,
+): THREE.Texture {
+  const key = `__die:${sides}:${colorId}`;
+  const hit = cache.get(key);
+  if (hit) return hit;
+
+  const { cols, rows } = atlasGrid(cells.length);
+  // Enough that a d20's twenty cells are still sharp when one fills the screen.
+  const cell = 256;
+  const [c, ctx] = canvas(cols * cell, rows * cell);
+  const paint = dieColor(colorId);
+
+  cells.forEach(({ label, fit }, i) => {
+    const x = (i % cols) * cell;
+    const y = Math.floor(i / cols) * cell;
+
+    // A radial fall-off per cell reads as a moulded face catching the light. A flat
+    // fill reads as a sticker.
+    const g = ctx.createRadialGradient(x + cell * 0.38, y + cell * 0.34, cell * 0.04,
+      x + cell / 2, y + cell / 2, cell * 0.72);
+    g.addColorStop(0, shade(paint.body, 0.24));
+    g.addColorStop(0.62, paint.body);
+    g.addColorStop(1, shade(paint.body, -0.24));
+    ctx.fillStyle = g;
+    ctx.fillRect(x, y, cell, cell);
+
+    ctx.save();
+    // Clipped to its own cell. A numeral that overruns bleeds into the neighbouring
+    // cell, and the face sampling that cell then shows two numbers at once — which is
+    // exactly what a d4 printed with a 4 and half a 7 looked like.
+    ctx.beginPath();
+    ctx.rect(x, y, cell, cell);
+    ctx.clip();
+    ctx.translate(x, y);
+    ctx.fillStyle = paint.ink;
+
+    const pips = sides === 6 ? PIPS[Number(label)] : undefined;
+    if (pips) {
+      const r = cell * fit * FACE_FILL * 0.15;
+      for (const [px, py] of pips) {
+        ctx.beginPath();
+        ctx.arc(px * cell, py * cell, r, 0, Math.PI * 2);
+        ctx.fill();
+        // A pip is drilled into the face, not printed on it: one highlight along the
+        // top edge is the whole of that impression.
+        ctx.save();
+        ctx.globalAlpha = 0.22;
+        ctx.fillStyle = '#ffffff';
+        ctx.beginPath();
+        ctx.arc(px * cell - r * 0.22, py * cell - r * 0.26, r * 0.62, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+        ctx.fillStyle = paint.ink;
+      }
+    } else {
+      /**
+       * Sized to the circle that actually fits on the face.
+       *
+       * The unwrap maps the face's circumradius to half the cell (less FACE_FILL), so
+       * the inscribed circle lands at `fit` of that — and a numeral drawn to the full
+       * cell runs well past the edges of a triangle. Two digits are wider than they
+       * are tall, so they get a shorter cap to keep the pair inside the same circle.
+       */
+      const room = cell * fit * FACE_FILL;
+      const size = label.length > 1 ? room * 0.66 : room * 0.95;
+      ctx.font = `700 ${size}px Helvetica, Arial, sans-serif`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(label, cell / 2, cell * 0.5);
+      // 6 and 9 are the same numeral upside down, so dice underline them. So do we.
+      if (label === '6' || label === '9') {
+        const w = ctx.measureText(label).width;
+        ctx.fillRect(cell / 2 - w / 2, cell * 0.5 + size * 0.42, w, Math.max(3, size * 0.075));
+      }
+    }
+    ctx.restore();
+  });
+
+  const tex = finish(c);
+  cache.set(key, tex);
+  return tex;
 }
 
 /** Build the canvas for a face. Shared by the 3D texture path and the 2D hand tray. */
@@ -390,7 +498,7 @@ function renderFace(src: FaceSource): HTMLCanvasElement {
         return p.back ? drawCardBack() : drawPlayingCard(String(p.rank ?? 'A'), String(p.suit ?? 'S'));
       }
       if (src.generator === 'chip') return drawChip(Number(p.value ?? 1), String(p.color ?? '#c0392b'));
-      if (src.generator === 'die') return drawDieFace(Number(p.sides ?? 6));
+      if (src.generator === 'die') return drawBlank(dieColor(defaultDieColor(Number(p.sides ?? 6))).body);
       if (src.generator === 'chess') return drawBlank(String(p.color) === 'w' ? '#efe7d8' : '#2a2a30');
       return drawBlank(String(p.color ?? '#888'));
     }

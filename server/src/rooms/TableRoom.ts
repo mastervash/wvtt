@@ -163,7 +163,7 @@ export class TableRoom extends Room<TableState> {
         id: p.id, kind: p.kind, defId: p.defId,
         x: p.x, y: p.y, z: p.z, rotY: p.rotY,
         faceUp: p.faceUp, stackId: p.stackId, order: p.order, zoneId: p.zoneId,
-        face: p.secret.face, value: p.secret.value, locked: p.locked,
+        face: p.secret.face, value: p.secret.value, locked: p.locked, tint: p.tint,
       });
     });
     const stacks: RoomSnapshot['stacks'] = [];
@@ -208,6 +208,8 @@ export class TableRoom extends Room<TableState> {
       piece.faceUp = p.faceUp; piece.stackId = p.stackId; piece.order = p.order;
       piece.zoneId = p.zoneId;
       piece.locked = !!p.locked;
+      piece.tint = p.tint ?? '';
+      piece.rollSeq = 0;        // no roll is in flight across a restart
       piece.heldBy = '';        // nobody is holding anything after a restart
       const secret = new Secret();
       secret.face = p.face; secret.value = p.value;

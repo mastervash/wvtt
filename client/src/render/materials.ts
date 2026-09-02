@@ -12,7 +12,8 @@
 
 import * as THREE from 'three';
 import type { ComponentDef } from '@wvtt/shared';
-import { faceTexture, defaultBackTexture } from './faces';
+import { faceTexture, defaultBackTexture, dieAtlasTexture, defaultDieColor } from './faces';
+import { dieShape } from './dice';
 
 const cache = new Map<string, THREE.Material | THREE.Material[]>();
 
@@ -37,10 +38,12 @@ export interface PieceLook {
   faceUp: boolean;
   /** Present only when this client was told the piece's identity. */
   known: boolean;
+  /** Colour chosen for this piece at the table, or '' for the pack's own. */
+  tint?: string;
 }
 
 export function materialsFor(look: PieceLook): THREE.Material | THREE.Material[] {
-  const { def, kind, faceUp, known } = look;
+  const { def, kind, faceUp, known, tint } = look;
   const defId = def?.id ?? `anon:${kind}`;
 
   if (kind === 'card' || kind === 'tile') {
@@ -80,17 +83,23 @@ export function materialsFor(look: PieceLook): THREE.Material | THREE.Material[]
   }
 
   if (kind === 'die') {
-    // The value is NOT painted on the mesh. A polyhedron's UVs stretch one texture
-    // across every face, so a number drawn here appears sheared and repeated and
-    // cannot be read from any angle. The die shows a body; DiceLabels shows the roll.
-    return memo(`${defId}:die`, () => {
-      const tex = def ? faceTexture(`${def.id}:front`, def.front) : null;
-      return new THREE.MeshStandardMaterial({
-        map: tex ?? undefined,
-        color: tex ? '#ffffff' : '#f2efe6',
-        roughness: 0.35,
-      });
-    });
+    /**
+     * The numbers ARE painted on the mesh now.
+     *
+     * They could not be while the solid used three.js's default UVs, which stretch one
+     * texture across every face — the old comment here was right about that, and the
+     * value lived on a billboard overhead instead. dice.ts unwraps each solid into a
+     * face-per-cell atlas, so the numerals sit flat on the faces the way they do on a
+     * real die, and the billboard is no longer standing in for them.
+     */
+    const sides = def?.sides ?? 6;
+    const colorId = tint || defaultDieColor(sides);
+    return memo(`${defId}:die:${colorId}`, () => new THREE.MeshStandardMaterial({
+      map: dieAtlasTexture(sides, dieShape(sides).cells, colorId),
+      // Moulded acrylic: tighter highlight than paper, no metal in it.
+      roughness: 0.3,
+      metalness: 0.02,
+    }));
   }
 
   if (kind === 'piece') {

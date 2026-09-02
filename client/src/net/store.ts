@@ -330,6 +330,9 @@ export const useStore = create<Store>((set, get) => {
     setPendingEditor(v) { set({ pendingEditor: v }); },
 
     setHovered(id) {
+      // Exposed for the end-to-end tests, which otherwise have to guess where a piece
+      // landed on screen and press blindly to find out.
+      if (import.meta.env.DEV) (window as unknown as { __wvttHover?: string | null }).__wvttHover = id;
       // Guarded: pointer-out from one piece and pointer-over onto the next arrive as a
       // pair, and writing the same value twice would re-render the whole scene for
       // nothing.
