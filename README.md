@@ -256,14 +256,20 @@ move.
 | Crazy Eights | Fully enforced: turn order, legal plays, and winning by emptying your hand. |
 | Wild Colours | Match the colour or the symbol. Skips, reverses, draw-twos and wilds. |
 | Prompt Party | Fill in the blank; answers are played face down and a rotating judge picks a winner. |
+| Ransom Note | Answer the prompt with the words you were dealt; the judge reads the notes out and picks one. |
 | Texas Hold'em | Chips, blinds, dealer button; the script runs the betting rounds. |
 | Chess | Snapping 8×8 board with enforced moves, captures and check. |
 
 The home page splits these in two: sandboxes on the left, packs that referee themselves
-on the right. Wild Colours and Prompt Party are original packs built from plain text
-cards — no licensed content — and both are meant to be copied and rewritten. Prompt
-Party in particular ships a deliberately mild deck; swap both lists for your group's own
-in the editor.
+on the right. Wild Colours, Prompt Party and Ransom Note are original packs built from
+plain text cards — no licensed content — and all three are meant to be copied and
+rewritten. Prompt Party and Ransom Note in particular ship deliberately mild decks; swap
+the lists for your group's own in the editor.
+
+In Ransom Note you build a reply one word at a time: drag a word into the strip in front
+of you, or right-click it and choose **Add to my note**. What you have written is sent
+to nobody else until you lock it in and the judge reads it out — and it goes back to
+being private the moment the judge moves on to the next note.
 
 Chess enforces turn order, legal movement, blocked paths, captures and the rule that you
 may not leave your own king in check. Castling, en passant and promotion are not

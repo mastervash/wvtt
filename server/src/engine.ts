@@ -22,6 +22,16 @@ export function thicknessOf(kind: string): number {
   return KIND_THICKNESS[kind] ?? 0.02;
 }
 
+/**
+ * Order given to a piece arriving in a laid-out zone, so relayoutZone() puts it last.
+ *
+ * A piece dropped into a row keeps whatever position it held in the zone it came
+ * from, which for a card leaving the middle of a hand means it lands in the middle of
+ * the row rather than on the end. Anything being ADDED to a row belongs at the end of
+ * it — that is what "put this word next" means to the player doing it.
+ */
+export const APPEND_ORDER = 9999;
+
 /* ------------------------------------------------------------------ *
  * Pack -> table
  * ------------------------------------------------------------------ */

@@ -32,7 +32,7 @@ export const SCRIPT_METHODS: ScriptMethodDoc[] = [
   { signature: 'table.dealToZone(zoneId, count)', summary: 'Deal from the deck into any zone, e.g. the community board.' },
   { signature: 'table.burn(stackId?)', summary: 'Move the top card face down to the muck or discard zone.' },
   { signature: 'table.recallAll(stackId?)', summary: 'Gather every piece on the table back into one pile, face down.' },
-  { signature: 'table.moveTo(pieceId, zoneId)', summary: 'Move a specific piece into a zone.' },
+  { signature: 'table.moveTo(pieceId, zoneId)', summary: 'Move a specific piece into a zone. In a zone laid out as a row or a fan it lands at the END, so moving words across one at a time builds a sentence in the order you moved them.' },
   { signature: 'table.flip(pieceId, faceUp)', summary: 'Turn a piece face up or face down.' },
   { signature: 'table.reject(reason)', summary: 'Refuse the current move with a message shown to the player. Only has an effect inside validateMove while rules are enforced.' },
 ];

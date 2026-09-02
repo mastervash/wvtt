@@ -1,6 +1,5 @@
 /**
- * The two scripted packs added for the party-games request: Wild Colours and
- * Prompt Party.
+ * The scripted party packs: Wild Colours, Prompt Party and Ransom Note.
  *
  * Run through real rooms and real clients, because the thing most worth checking is
  * not the rules but the hidden information around them: a face-down submission must be
@@ -27,11 +26,12 @@ function check(label: string, cond: boolean, detail = '') {
 
 interface Snap {
   status: string;
-  pieces: Record<string, { id: string; zoneId: string; faceUp: boolean; secret?: { face?: string } }>;
+  pieces: Record<string, { id: string; zoneId: string; order: number; faceUp: boolean; secret?: { face?: string } }>;
   log: { text: string; name: string; kind: string }[];
 }
 const snap = (room: Room) => room.state.toJSON() as unknown as Snap;
-const inZone = (s: Snap, z: string) => Object.values(s.pieces).filter((p) => p.zoneId === z);
+const inZone = (s: Snap, z: string) =>
+  Object.values(s.pieces).filter((p) => p.zoneId === z).sort((a, b) => a.order - b.order);
 const readable = (s: Snap, z: string) => inZone(s, z).filter((p) => p.secret?.face).length;
 const logText = (s: Snap, n = 8) => s.log.slice(-n).map((l) => l.text).join(' | ');
 
@@ -256,6 +256,147 @@ async function promptParty(port: number) {
   await roomC.leave(true);
 }
 
+/* ------------------------------------------------------------------ *
+ * Ransom Note
+ * ------------------------------------------------------------------ */
+
+async function ransomNote(port: number) {
+  console.log('\n=== Ransom Note ===');
+  const ca = new Client(`ws://localhost:${port}`);
+  const roomA = await ca.joinOrCreate('table', { name: 'Ana', packId: 'ransomnote' });
+  await sleep(400);
+  const cb = new Client(`ws://localhost:${port}`);
+  const roomB = await cb.joinById(roomA.roomId, { name: 'Ben' });
+  const cc = new Client(`ws://localhost:${port}`);
+  const roomC = await cc.joinById(roomA.roomId, { name: 'Cal' });
+  await sleep(600);
+
+  const errorsB: string[] = [];
+  roomB.onMessage('opError', (m: { error: string }) => errorsB.push(m.error));
+
+  roomA.send('op', { t: 'sit', seat: 0 });
+  roomB.send('op', { t: 'sit', seat: 1 });
+  roomC.send('op', { t: 'sit', seat: 2 });
+  await sleep(500);
+
+  console.log('\nStarting a game');
+  roomA.send('op', { t: 'scriptAction', action: 'newgame' });
+  await sleep(2000);
+
+  let sa = snap(roomA), sb = snap(roomB);
+  check('Ana holds twelve words', inZone(sa, 'hand0').length === 12, `${inZone(sa, 'hand0').length}`);
+  check('Ben holds twelve words', inZone(sb, 'hand1').length === 12, `${inZone(sb, 'hand1').length}`);
+  check('a prompt is on the table', inZone(sa, 'prompt').length === 1);
+  check('everyone can read the prompt', readable(sb, 'prompt') === 1);
+  check('Ana judges first', /Ana judges/.test(sa.status), sa.status);
+  check("Ben cannot read Cal's hand", readable(sb, 'hand2') === 0, `leaked ${readable(sb, 'hand2')}`);
+
+  console.log('\nWriting a note, one word at a time');
+  // Deliberately NOT the first three cards in hand order: a note has to come out in
+  // the order the words were added, not the order the hand happened to be sorted in.
+  const bensHand = inZone(snap(roomB), 'hand1');
+  const picked = [bensHand[5], bensHand[1], bensHand[9]];
+  for (const word of picked) {
+    roomB.send('op', { t: 'scriptAction', action: 'addword', payload: { pieceId: word.id } });
+    await sleep(700);
+  }
+
+  sb = snap(roomB);
+  const note = inZone(sb, 'note1');
+  check('three words left his hand', inZone(sb, 'hand1').length === 9, `${inZone(sb, 'hand1').length}`);
+  check('the note reads in the order the words were added',
+    note.map((p) => p.id).join(',') === picked.map((p) => p.id).join(','),
+    `${note.map((p) => p.secret?.face).join(' ')}`);
+  check('Ben can read his own note', readable(sb, 'note1') === 3, `${readable(sb, 'note1')}`);
+  check('the judge cannot read a note being written', readable(snap(roomA), 'note1') === 0, 'leaked to the judge');
+  check('a rival cannot read it either', readable(snap(roomC), 'note1') === 0, 'leaked to a rival');
+
+  console.log('\nTaking a word back, and playing one loose');
+  roomB.send('op', { t: 'scriptAction', action: 'takeback', payload: { pieceId: picked[2].id } });
+  await sleep(800);
+  sb = snap(roomB);
+  check('the word went back to his hand', inZone(sb, 'hand1').length === 10 && inZone(sb, 'note1').length === 2,
+    `${inZone(sb, 'hand1').length}/${inZone(sb, 'note1').length}`);
+
+  errorsB.length = 0;
+  roomB.send('op', { t: 'reveal', target: inZone(snap(roomB), 'hand1')[0].id });
+  await sleep(700);
+  check('playing a word straight to the table is refused',
+    errorsB.some((e) => /Add to my note/i.test(e)), errorsB.join(' | '));
+
+  console.log('\nLocking in');
+  roomB.send('op', { t: 'scriptAction', action: 'lockin' });
+  await sleep(800);
+  check('the table is told a note is in', /Ben has locked/.test(logText(snap(roomA))), logText(snap(roomA)));
+  check('nobody can read it yet', readable(snap(roomA), 'note1') === 0, 'leaked on lock-in');
+
+  errorsB.length = 0;
+  roomB.send('op', { t: 'drop', target: inZone(snap(roomB), 'hand1')[0].id, zoneId: 'note1', x: 0, z: 2.4 });
+  await sleep(700);
+  check('a locked note cannot be edited', errorsB.some((e) => /locked in/i.test(e)), errorsB.join(' | '));
+
+  const calsHand = inZone(snap(roomC), 'hand2');
+  roomC.send('op', { t: 'scriptAction', action: 'addword', payload: { pieceId: calsHand[0].id } });
+  await sleep(700);
+  roomC.send('op', { t: 'scriptAction', action: 'addword', payload: { pieceId: calsHand[3].id } });
+  await sleep(700);
+  roomC.send('op', { t: 'scriptAction', action: 'lockin' });
+  await sleep(800);
+  check('the round moves to the judge', /Every note is in/.test(logText(snap(roomA))), logText(snap(roomA)));
+
+  console.log('\nReading the notes out');
+  roomA.send('op', { t: 'scriptAction', action: 'read' });
+  await sleep(900);
+  sa = snap(roomA);
+  const first = inZone(sa, 'board');
+  check('a note is on the board', first.length > 0, `${first.length}`);
+  check('everyone can read it', readable(snap(roomC), 'board') === first.length, `${readable(snap(roomC), 'board')}`);
+  check('the note is written into the log', /Note 1 of 2/.test(logText(sa)), logText(sa));
+  check('the note that is still to come stays private',
+    readable(sa, 'note1') === 0 && readable(sa, 'note2') === 0, 'leaked ahead of its turn');
+
+  roomA.send('op', { t: 'scriptAction', action: 'read' });
+  await sleep(1000);
+  sa = snap(roomA);
+  check('the second note is on the board now', inZone(sa, 'board').length > 0);
+  check('the first note went back to its writer',
+    inZone(sa, 'board')[0].id !== first[0].id, 'the board did not change hands');
+
+  // A note that has been off the board is private again on the WIRE, which is the only
+  // thing the server controls: the players who watched it being read out remember it,
+  // exactly as they would at a real table. Someone who arrives afterwards is the honest
+  // test of that, because they have nothing to remember.
+  const cd = new Client(`ws://localhost:${port}`);
+  const roomD = await cd.joinById(roomA.roomId, { name: 'Dee' });
+  await sleep(800);
+  const sd = snap(roomD);
+  check('a latecomer can read the note being read out', readable(sd, 'board') === inZone(sd, 'board').length,
+    `${readable(sd, 'board')}/${inZone(sd, 'board').length}`);
+  check('but not the one that went back', readable(sd, 'note1') + readable(sd, 'note2') === 0,
+    'a note off the board was still on the wire');
+
+  console.log('\nAwarding the round');
+  const onBoard = inZone(snap(roomA), 'board');
+  roomA.send('op', { t: 'scriptAction', action: 'award', payload: { pieceId: onBoard[0].id } });
+  await sleep(2000);
+
+  sa = snap(roomA);
+  check('the round is scored', /wins the round with/.test(logText(sa)), logText(sa));
+  check('the judge moves on', /Ben judges/.test(sa.status), sa.status);
+  check('the board is cleared', inZone(sa, 'board').length === 0, `${inZone(sa, 'board').length}`);
+  check('no note is left on the table',
+    inZone(sa, 'note1').length === 0 && inZone(sa, 'note2').length === 0);
+  check('spent words are in the muck', inZone(sa, 'muck').length >= 4, `${inZone(sa, 'muck').length}`);
+  check('a fresh prompt is up', inZone(sa, 'prompt').length === 1);
+  check('Ben is back to twelve words', inZone(snap(roomB), 'hand1').length === 12,
+    `${inZone(snap(roomB), 'hand1').length}`);
+
+  await roomA.leave(true);
+  await roomB.leave(true);
+  await roomC.leave(true);
+  await roomD.leave(true);
+}
+
 async function main() {
   const httpServer = createServer();
   const gameServer = new Server({ transport: new WebSocketTransport({ server: httpServer }) });
@@ -264,6 +405,7 @@ async function main() {
 
   await wildColours(PORT);
   await promptParty(PORT);
+  await ransomNote(PORT);
 
   await gameServer.gracefullyShutdown(false);
   console.log(failures === 0 ? '\nALL CHECKS PASSED' : `\n${failures} CHECK(S) FAILED`);

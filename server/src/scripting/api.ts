@@ -8,7 +8,7 @@
  */
 
 import type { TableState, Piece } from '../state.js';
-import { detachFromStack, makeStack, relayoutZone, replaceIds, restackYs, pushLog } from '../engine.js';
+import { APPEND_ORDER, detachFromStack, makeStack, relayoutZone, replaceIds, restackYs, pushLog } from '../engine.js';
 import { shuffleInPlace } from '../rng.js';
 import type { HostFn } from './host.js';
 
@@ -239,6 +239,11 @@ export function buildScriptApi(deps: ApiDeps): Record<string, HostFn> {
       const zoneId = asString(args[1]);
       detachFromStack(state, piece);
       placeInZone(piece, zoneId);
+      // A piece a script moves into a row lands on the END of it, exactly as a piece
+      // a player drops there does. Without this it keeps the position it held in the
+      // zone it came from, so a note built word by word out of a hand comes out in
+      // the order the hand happened to be sorted in.
+      piece.order = APPEND_ORDER;
       relayoutZone(state, zoneId);
       markVisibilityDirty();
       return piece.id;
