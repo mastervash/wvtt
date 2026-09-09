@@ -131,7 +131,18 @@ async function wildColours(port: number) {
       check('only the player who laid the wild may choose', errorsB.some((e) => /can choose/i.test(e)), errorsB.join(' | '));
       roomA.send('op', { t: 'scriptAction', action: 'colour:R' });
       await sleep(700);
-      check('naming a colour passes the turn on', /Ben to play/.test(snap(roomA).status), snap(roomA).status);
+      // A wild draw four makes the next player draw and skips them, so at a
+      // two-player table the turn comes straight back. A plain wild passes it on.
+      // Asserting "Ben to play" for both fails on whichever the deal happened to
+      // give us, which is a coin toss rather than a bug.
+      const backToAna = legal.secret!.face! === 'W4';
+      check(
+        backToAna
+          ? 'a wild draw four skips Ben and comes back to Ana'
+          : 'naming a colour passes the turn on',
+        new RegExp(backToAna ? 'Ana to play' : 'Ben to play').test(snap(roomA).status),
+        `${legal.secret!.face} → ${snap(roomA).status}`,
+      );
     } else {
       // Skips, reverses and draw-twos all bounce the turn straight back at a
       // two-player table, exactly as the printed rules say they should.
