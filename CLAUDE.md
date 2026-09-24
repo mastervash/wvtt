@@ -7,16 +7,19 @@ Repo: https://github.com/mastervash/wvtt
 
 ## Layout on this machine
 
-This project has been moved and renamed once, so check before assuming a path:
-
 - Working copy for development: whichever directory this file sits in.
-- The **deployed** instance is whatever `WorkingDirectory` in
-  `/etc/systemd/system/wvtt.service` points at. Confirm with
-  `systemctl show wvtt -p WorkingDirectory` before deploying — it is not always the
-  directory you are editing.
+- The **deployed** instance is the Docker container `wvtt`, run by `docker-compose.yml`
+  from the published image `ghcr.io/mastervash/wvtt:latest`. `.env` (not in git) sets
+  `WVTT_BIND` so the port is published only where the reverse proxy reaches it.
 
-Deploy with `npm run build` then `sudo systemctl restart wvtt`. The service serves the
-built client, the JSON API and the game websocket on port 2567.
+Deploy by pushing to `main`: the `image` workflow builds and publishes the image. Once
+it has finished (`gh run watch`), run `sudo docker compose pull && sudo docker compose up -d`
+here. The container serves the built client, the JSON API and the game websocket on port
+2567. Room snapshots live in the `wvtt-data` volume.
+
+`deploy/wvtt.service` is the older systemd deploy. The unit is still installed but
+disabled. Do not start it: the container holds port 2567, so the unit just crash-loops
+with `EADDRINUSE`.
 
 Port 2567 is closed to the internet; a reverse proxy in front of it terminates TLS. When
 that proxy runs in a container it reaches the host over the container bridge, so the
