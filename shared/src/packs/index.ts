@@ -8,17 +8,18 @@ import { eightsPack } from './eights.js';
 import { wildColoursPack } from './wildcolours.js';
 import { promptPartyPack } from './promptparty.js';
 import { ransomNotePack } from './ransomnote.js';
+import { shortFusePack } from './shortfuse.js';
 
 export * from './common.js';
 export {
   sandboxPack, pokerPack, dicePack, chessPack, boardPack,
-  eightsPack, wildColoursPack, promptPartyPack, ransomNotePack,
+  eightsPack, wildColoursPack, promptPartyPack, ransomNotePack, shortFusePack,
 };
 
 /** Packs offered in the room's game picker. All are authored in the public format. */
 export const BUILTIN_PACKS: GamePack[] = [
   sandboxPack, dicePack, boardPack,
-  eightsPack, wildColoursPack, promptPartyPack, ransomNotePack, pokerPack, chessPack,
+  eightsPack, wildColoursPack, promptPartyPack, ransomNotePack, shortFusePack, pokerPack, chessPack,
 ];
 
 /**

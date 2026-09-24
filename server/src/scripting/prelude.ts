@@ -43,6 +43,7 @@ export const PRELUDE = `
     burn:       function (stackId) { return call('burn', [stackId || null]); },
     recallAll:  function (stackId) { return call('recallAll', [stackId || null]); },
     moveTo:     function (id, z)   { return call('moveTo', [id, z]); },
+    insertAt:   function (id, z, d) { return call('insertAt', [id, z, d || 0]); },
     flip:       function (id, up)  { return call('flip', [id, !!up]); },
 
     /* ---- refusing a move; only meaningful while enforcement is on ---- */

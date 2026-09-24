@@ -10,6 +10,7 @@
 import type { TableState, Piece } from '../state.js';
 import { APPEND_ORDER, detachFromStack, makeStack, relayoutZone, replaceIds, restackYs, pushLog } from '../engine.js';
 import { shuffleInPlace } from '../rng.js';
+import type { PeekGrants } from '../visibility.js';
 import type { HostFn } from './host.js';
 
 export interface ApiDeps {
@@ -17,6 +18,8 @@ export interface ApiDeps {
   vars: Map<string, unknown>;
   /** Called whenever a script mutation could change who can see what. */
   markVisibilityDirty: () => void;
+  /** The room's peek grants, so a card tucked into a pile stops being peekable. */
+  peeks?: PeekGrants;
 }
 
 const asString = (v: unknown, fallback = ''): string => (typeof v === 'string' ? v : fallback);
@@ -26,7 +29,7 @@ const asInt = (v: unknown, fallback = 0): number => {
 };
 
 export function buildScriptApi(deps: ApiDeps): Record<string, HostFn> {
-  const { state, vars, markVisibilityDirty } = deps;
+  const { state, vars, markVisibilityDirty, peeks } = deps;
 
   /** The biggest pile, which is what a script means by "the deck" when unqualified. */
   function mainStackId(): string | null {
@@ -245,6 +248,58 @@ export function buildScriptApi(deps: ApiDeps): Record<string, HostFn> {
       // the order the hand happened to be sorted in.
       piece.order = APPEND_ORDER;
       relayoutZone(state, zoneId);
+      markVisibilityDirty();
+      return piece.id;
+    },
+
+    /**
+     * Slide a piece into the pile in a zone, `depth` cards down from the top.
+     *
+     * moveTo() can only lay a piece loose in a zone, which is no use for returning a
+     * card to the deck: a game that hides something back in the pile at a place of the
+     * player's choosing needs the pile itself. Zero is the top; a negative depth, or
+     * one deeper than the pile, is the bottom. A zone with no pile yet gets one, built
+     * from whatever single card is lying there.
+     */
+    insertAt: (args) => {
+      const piece = state.pieces.get(asString(args[0]));
+      const zone = state.zones.get(asString(args[1]));
+      if (!piece || !zone) return null;
+      const depth = asInt(args[2], 0);
+
+      const prevZone = piece.zoneId;
+      detachFromStack(state, piece);
+      piece.heldBy = '';
+      // Once a card is back in a pile nobody remembers which one it was.
+      peeks?.delete(piece.id);
+      if (zone.visibility === 'hidden') piece.faceUp = false;
+      else if (zone.visibility === 'public' || zone.visibility === 'owner') piece.faceUp = true;
+
+      let stack: ReturnType<typeof state.stacks.get>;
+      state.stacks.forEach((s) => {
+        if (s.zoneId === zone.id && (!stack || s.pieceIds.length > stack.pieceIds.length)) stack = s;
+      });
+      if (!stack) {
+        let lone: Piece | undefined;
+        state.pieces.forEach((p) => {
+          if (!lone && p !== piece && p.zoneId === zone.id && !p.stackId && p.kind === piece.kind) lone = p;
+        });
+        if (!lone) {
+          placeInZone(piece, zone.id);
+          if (prevZone && prevZone !== zone.id) relayoutZone(state, prevZone);
+          markVisibilityDirty();
+          return piece.id;
+        }
+        stack = makeStack(state, [lone], zone.x, zone.z, zone.id);
+      }
+
+      const ids = Array.from(stack.pieceIds);
+      const at = depth < 0 || depth >= ids.length ? 0 : ids.length - depth;
+      ids.splice(at, 0, piece.id);
+      piece.stackId = stack.id;
+      replaceIds(stack.pieceIds, ids);
+      restackYs(state, stack.id);
+      if (prevZone && prevZone !== zone.id) relayoutZone(state, prevZone);
       markVisibilityDirty();
       return piece.id;
     },

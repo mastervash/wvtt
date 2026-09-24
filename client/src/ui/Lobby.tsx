@@ -32,6 +32,7 @@ const FALLBACK: PackCard[] = [
   { id: 'wildcolours', name: 'Wild Colours', description: 'Colours, skips, reverses and wilds.', flavour: 'scripted', minSeats: 2, maxSeats: 6 },
   { id: 'promptparty', name: 'Prompt Party', description: 'Fill in the blank; the judge picks a winner.', flavour: 'scripted', minSeats: 3, maxSeats: 6 },
   { id: 'ransomnote', name: 'Ransom Note', description: 'Answer the prompt with the words you were dealt.', flavour: 'scripted', minSeats: 3, maxSeats: 6 },
+  { id: 'shortfuse', name: 'Short Fuse', description: 'Draw until someone blows up. Defuse, dodge and Nope.', flavour: 'scripted', minSeats: 2, maxSeats: 6 },
   { id: 'poker', name: "Texas Hold'em", description: 'Felt, chips, blinds and a dealer button.', flavour: 'scripted', minSeats: 2, maxSeats: 6 },
   { id: 'chess', name: 'Chess', description: 'Snapping board, optional rules enforcement.', flavour: 'scripted', minSeats: 2, maxSeats: 2 },
 ];

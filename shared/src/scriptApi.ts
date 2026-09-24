@@ -15,6 +15,7 @@ export const SCRIPT_HANDLERS: ScriptMethodDoc[] = [
   { signature: 'onSetup(table, reason)', summary: "Runs when the pack loads and when a player presses Reset table. `reason` is \"load\" or \"reset\": on a reset the player wants the table CLEARED, so a pack that deals a hand here should skip the deal and wait for its own New round button." },
   { signature: 'onAction(table, action, payload)', summary: 'Runs when a player presses a game button. `action` matches an id from manifest.actions, which is what puts the button on screen in the first place. `payload` always carries { seat, name } for whoever pressed it, plus { pieceId } or { stackId } when the action targets a piece or a pile.' },
   { signature: 'validateMove(table, move)', summary: 'Runs before a move is applied while rules are enforced. Return false, or call table.reject("reason"), to refuse it. Return nothing to allow it.' },
+  { signature: 'afterMove(table, move)', summary: 'Runs after a move has been applied, with the same `move` validateMove saw. It cannot refuse anything; use it for consequences that depend on the result, such as reacting to the card a draw actually turned up.' },
 ];
 
 export const SCRIPT_METHODS: ScriptMethodDoc[] = [
@@ -33,6 +34,7 @@ export const SCRIPT_METHODS: ScriptMethodDoc[] = [
   { signature: 'table.burn(stackId?)', summary: 'Move the top card face down to the muck or discard zone.' },
   { signature: 'table.recallAll(stackId?)', summary: 'Gather every piece on the table back into one pile, face down.' },
   { signature: 'table.moveTo(pieceId, zoneId)', summary: 'Move a specific piece into a zone. In a zone laid out as a row or a fan it lands at the END, so moving words across one at a time builds a sentence in the order you moved them.' },
+  { signature: 'table.insertAt(pieceId, zoneId, depth)', summary: 'Slide a piece into the pile in a zone, `depth` cards from the top: 0 is the top, -1 (or anything deeper than the pile) the bottom. This is how a card goes back into the deck at a chosen place.' },
   { signature: 'table.flip(pieceId, faceUp)', summary: 'Turn a piece face up or face down.' },
   { signature: 'table.reject(reason)', summary: 'Refuse the current move with a message shown to the player. Only has an effect inside validateMove while rules are enforced.' },
 ];

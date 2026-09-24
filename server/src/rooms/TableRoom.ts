@@ -425,6 +425,13 @@ export class TableRoom extends Room<TableState> {
       if (note) pushLog(this.state, `Note: ${note}`, { kind: 'rules' });
     }
 
+    // Some consequences can only be judged once the move has landed — which card a draw
+    // actually turned up, say. Scripts that care define afterMove; it has no veto.
+    if (this.script && MOVE_OPS.has(op.t)) {
+      const after = this.script.call('afterMove', [{ ...op, seat: player.seat, name: player.name }]);
+      if (!after.ok) pushLog(this.state, `Rules script error after "${op.t}": ${after.error}`, { kind: 'rules' });
+    }
+
     if (result.visibilityDirty || this.takeScriptDirty()) this.refreshViews();
   }
 
@@ -603,6 +610,7 @@ export class TableRoom extends Room<TableState> {
       state: this.state,
       vars: this.scriptVars,
       markVisibilityDirty: () => { this.scriptDirty = true; },
+      peeks: this.peeks,
     });
 
     const { host, error } = await ScriptHost.create(source, api);
