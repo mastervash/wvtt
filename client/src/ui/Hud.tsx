@@ -53,6 +53,7 @@ export function Hud() {
   const [logOpen, setLogOpen] = useState(false);
   const [editorOpen, setEditorOpen] = useState(false);
   const [chatOpen, setChatOpen] = useState(false);
+  const [notesOpen, setNotesOpen] = useState(false);
   // Track what has been read so the button can show there is something new.
   const [seenChat, setSeenChat] = useState(0);
 
@@ -189,6 +190,7 @@ export function Hud() {
             )}
           </button>
           <button className={logOpen ? 'on' : ''} onClick={() => setLogOpen((v) => !v)}>Log</button>
+          {pack?.manifest.notes && <button className={notesOpen ? 'on' : ''} onClick={() => setNotesOpen((v) => !v)}>Notes</button>}
         </div>
 
         <div className="players">
@@ -390,6 +392,16 @@ export function Hud() {
             ))}
           </div>
         </div>
+      )}
+
+      {notesOpen && pack?.manifest.notes && (
+        <section className="notes-panel panel" aria-label="Game notes">
+          <header>
+            <span>Game notes</span>
+            <button className="icon" onClick={() => setNotesOpen(false)} title="Close notes">✕</button>
+          </header>
+          <div className="notes-copy">{pack.manifest.notes}</div>
+        </section>
       )}
 
       {mySeat >= 0 && hasHandZone && (

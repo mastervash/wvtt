@@ -462,6 +462,16 @@ export function Editor({ onClose }: { onClose: () => void }) {
                 One-line description
                 <input value={pack.manifest.description} onChange={(e) => patchManifest({ description: e.target.value })} />
               </label>
+              <label>
+                Game notes and rules
+                <textarea
+                  rows={7}
+                  value={pack.manifest.notes ?? ''}
+                  onChange={(e) => patchManifest({ notes: e.target.value })}
+                  placeholder="Setup, rules summary, house rules, links, or anything players should know."
+                />
+                <span className="hint">Shown to everyone at the table. Keep it under 2,000 characters.</span>
+              </label>
               <details className="ref">
                 <summary>Advanced — pack id and raw JSON</summary>
                 <label>

@@ -25,9 +25,12 @@ services:
     environment:
       # How long a table is kept after everyone leaves, so players can come back to it.
       ROOM_TTL_HOURS: ${ROOM_TTL_HOURS:-168}
+      DECKS_DIR: /decks
     volumes:
       # Room snapshots. Without this, a restart loses every table in progress.
       - wvtt-data:/data
+      # Locally imported card art stays ignored by Git but is available to the app.
+      - ./server/data/decks:/decks:ro
     healthcheck:
       test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:2567/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
       interval: 30s

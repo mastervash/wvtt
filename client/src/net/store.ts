@@ -9,7 +9,7 @@
 
 import { create } from 'zustand';
 import { Client, Room } from 'colyseus.js';
-import type { GamePack, Op, PieceState, StackState, ZoneDef, PlayerInfo } from '@wvtt/shared';
+import type { GamePack, Op, PieceState, StackState, ZoneDef, PlayerInfo, ExplodingKittensSelection } from '@wvtt/shared';
 
 export interface Snapshot {
   roomCode: string;
@@ -149,7 +149,7 @@ interface Store {
    */
   menu: { x: number; y: number; targetId: string } | null;
 
-  connect: (opts: { name: string; roomCode?: string; packId?: string }) => Promise<void>;
+  connect: (opts: { name: string; roomCode?: string; packId?: string; deckSelection?: ExplodingKittensSelection }) => Promise<void>;
   leave: () => void;
   send: (op: Op) => void;
   setDragging: (id: string | null) => void;
@@ -257,7 +257,7 @@ export const useStore = create<Store>((set, get) => {
     hovered: null,
     menu: null,
 
-    async connect({ name, roomCode, packId }) {
+    async connect({ name, roomCode, packId, deckSelection }) {
       set({ phase: 'connecting', error: '' });
       try {
         const client = new Client(wsEndpoint());
@@ -276,7 +276,7 @@ export const useStore = create<Store>((set, get) => {
             room = await client.create('table', { name, roomCode });
           }
         } else {
-          room = await client.create('table', { name, packId });
+          room = await client.create('table', { name, packId, deckSelection });
         }
 
         room.onMessage('pack', (pack: GamePack) => set({ pack }));

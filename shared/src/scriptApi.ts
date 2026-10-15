@@ -71,6 +71,7 @@ export function packFormatReference(): string {
     "name": "Display Name",
     "author": "Your name",
     "description": "One or two sentences.",
+    "notes": "Optional setup, rules or house rules shown at the table.",
     "minSeats": 1, "maxSeats": 6,
     "defaultEnforcement": "off" | "advisory" | "enforced",
     "tableColor": "#1f6f4a",
@@ -97,6 +98,7 @@ COMPONENT (one kind of physical object):
   front/back types: { "type": "text", ... }
                     { "type": "generated", "generator": "playing-card"|"chip"|"die"|"chess"|"blank", "params": {...} }
                     { "type": "image", "dataUri": "data:image/png;base64,..." }
+                    { "type": "asset", "path": "/assets/decks/..." } // installed deck libraries only
   "data" is free-form and is what your script reads via piece.defId lookups.
 
 ZONE (a region that carries visibility rules — this is how hidden information works):

@@ -40,4 +40,4 @@ Test hidden information at the wire boundary: card identities must never reach a
 
 ## Commits & Pull Requests
 
-Recent history uses concise Conventional Commit-style subjects: `feat: add Short Fuse`, `fix: ...`, `docs: ...`, and `chore: ...`. Keep commits scoped and imperative. PRs should explain the behavior change, list commands run, link relevant issues, and include screenshots or a short recording for visual/UI changes. Flag any multiplayer, security, persistence, or pack-format compatibility impact explicitly.
+Recent history uses concise Conventional Commit-style subjects: `feat: add Exploding Kittens`, `fix: ...`, `docs: ...`, and `chore: ...`. Keep commits scoped and imperative. PRs should explain the behavior change, list commands run, link relevant issues, and include screenshots or a short recording for visual/UI changes. Flag any multiplayer, security, persistence, or pack-format compatibility impact explicitly.

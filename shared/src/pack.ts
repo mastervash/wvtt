@@ -21,7 +21,9 @@ export type FaceSource =
   /** Render text on a plain background. Powers custom prompt/answer decks. */
   | { type: 'text'; text: string; bg?: string; fg?: string; fontScale?: number }
   /** A data: URI supplied by the pack author. Kept small; validated on import. */
-  | { type: 'image'; dataUri: string };
+  | { type: 'image'; dataUri: string }
+  /** A read-only image served by this table's host, used for installed deck libraries. */
+  | { type: 'asset'; path: string };
 
 /** A kind of piece the pack can place on the table, e.g. "ace of spades". */
 export interface ComponentDef {
@@ -61,6 +63,8 @@ export interface PackManifest {
   name: string;
   author: string;
   description: string;
+  /** Optional public rules, setup notes or house rules supplied by the game creator. */
+  notes?: string;
   /** Minimum and maximum players the pack expects. Solo play is always allowed. */
   minSeats: number;
   maxSeats: number;

@@ -89,6 +89,9 @@ export function validatePack(input: unknown): PackValidation {
     if (typeof v !== 'string' || v.length === 0) errors.push(`manifest.${field} must be a non-empty string.`);
     else if (v.length > LIMITS.stringField) errors.push(`manifest.${field} is too long.`);
   }
+  if (m.notes !== undefined && (typeof m.notes !== 'string' || m.notes.length > LIMITS.stringField)) {
+    errors.push('manifest.notes must be a string of up to 2000 characters.');
+  }
   if (!Number.isInteger(m.minSeats) || m.minSeats < 1 || m.minSeats > 12) errors.push('manifest.minSeats must be 1-12.');
   if (!Number.isInteger(m.maxSeats) || m.maxSeats < 1 || m.maxSeats > 12) errors.push('manifest.maxSeats must be 1-12.');
   if (Number.isInteger(m.minSeats) && Number.isInteger(m.maxSeats) && m.minSeats! > m.maxSeats!) {
@@ -141,6 +144,12 @@ export function validatePack(input: unknown): PackValidation {
             errors.push(`components[${i}] image face must be a PNG, JPEG, WebP or GIF data URI.`);
           } else if (byteLength(face.dataUri) > LIMITS.dataUriBytes) {
             errors.push(`components[${i}] image is larger than ${LIMITS.dataUriBytes / 1024} KB.`);
+          }
+        } else if (face.type === 'asset') {
+          // Installed artwork is served from the host's read-only deck library. Keep
+          // packs from turning this into an arbitrary URL loader.
+          if (typeof face.path !== 'string' || !/^\/assets\/decks\/[a-z0-9/_-]+\.(png|jpe?g|webp|gif)$/i.test(face.path)) {
+            errors.push(`components[${i}] asset face must be a local deck image path.`);
           }
         } else if (face.type === 'text') {
           if (typeof face.text !== 'string' || face.text.length > LIMITS.stringField) {

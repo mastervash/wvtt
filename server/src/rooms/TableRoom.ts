@@ -7,7 +7,7 @@
 
 import { Room, Client } from '@colyseus/core';
 import { StateView } from '@colyseus/schema';
-import type { GamePack, Op, Enforcement } from '@wvtt/shared';
+import type { GamePack, Op, Enforcement, ExplodingKittensSelection } from '@wvtt/shared';
 import { getBuiltinPack, validatePack, DEFAULT_PACK_ID, TOKEN_COLORS } from '@wvtt/shared';
 import { TableState, Piece, Stack, Secret, Player } from '../state.js';
 import { applySeatSetup, buildTable, pushLog, relayoutZone, restackYs } from '../engine.js';
@@ -31,6 +31,7 @@ interface JoinOptions {
   name?: string;
   roomCode?: string;
   packId?: string;
+  deckSelection?: ExplodingKittensSelection;
 }
 
 export class TableRoom extends Room<TableState> {
@@ -75,7 +76,7 @@ export class TableRoom extends Room<TableState> {
     if (saved) {
       await this.restoreFrom(saved);
     } else {
-      const pack = getBuiltinPack(options.packId ?? DEFAULT_PACK_ID) ?? getBuiltinPack(DEFAULT_PACK_ID)!;
+      const pack = getBuiltinPack(options.packId ?? DEFAULT_PACK_ID, options.deckSelection) ?? getBuiltinPack(DEFAULT_PACK_ID)!;
       // Awaited: starting the sandbox loads a WASM module, and until this resolves the
       // script's onSetup has not run. Colyseus holds joins until onCreate settles, so
       // awaiting here means onSetup always sees an empty table rather than racing the

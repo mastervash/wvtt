@@ -254,6 +254,15 @@ input:focus, textarea:focus, select:focus {
 
 .packs { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 8px; }
 .packs.one { grid-template-columns: 1fr; }
+.deck-picker { margin: 18px 0; padding: 16px; border: 1px solid var(--line); border-radius: var(--radius); background: #12171d; }
+.deck-picker h2 { margin: 0 0 4px; font-size: 1rem; }
+.deck-picker select { width: 100%; margin-top: 5px; }
+.deck-expansions { display: flex; flex-wrap: wrap; gap: 9px 16px; align-items: center; margin-top: 14px; }
+.deck-expansions > span { font-weight: 600; }
+.deck-expansions .hint { width: 100%; margin: 0; }
+.notes-panel { position: fixed; right: 18px; top: 64px; width: min(440px, calc(100vw - 36px)); max-height: min(70vh, 620px); overflow: auto; z-index: 20; }
+.notes-panel header { display: flex; align-items: center; justify-content: space-between; padding: 10px 12px; border-bottom: 1px solid var(--line); font-weight: 700; }
+.notes-copy { white-space: pre-wrap; padding: 14px; color: var(--text); line-height: 1.55; }
 .pack { text-align: left; display: flex; flex-direction: column; gap: 3px; padding: 12px; }
 /* The game tiles are the thing you came to the lobby to press, so they get the one
    piece of motion in it: a small rise, not a colour flash. */

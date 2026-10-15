@@ -1,12 +1,12 @@
 /**
- * Short Fuse, played through a real room by real clients.
+ * Exploding Kittens, played through a real room by real clients.
  *
  * Deals are random, so the test reaches into the room between moves to put a chosen
  * card on top of the pile or into a hand. Everything the players then do goes over the
  * wire exactly as the client sends it, and every assertion about who can read what is
  * made from a client's own copy of the state.
  *
- * Run: npx tsx server/test/shortFuse.ts
+ * Run: npx tsx server/test/explodingKittens.ts
  */
 
 import { createServer } from 'node:http';
@@ -67,11 +67,11 @@ function rigTop(face: string) {
   refresh();
 }
 
-/** Put the top card on the pile that is anything but a bomb. */
+/** Put the top card on the pile that is not an Exploding Kitten. */
 function rigSafeTop() {
   const st = state();
   const stack = [...st.stacks.values()].find((s) => s.zoneId === 'draw')!;
-  const safe = [...stack.pieceIds].find((pid) => st.pieces.get(pid)!.secret.face !== 'BOMB')!;
+  const safe = [...stack.pieceIds].find((pid) => st.pieces.get(pid)!.secret.face !== 'KITTEN')!;
   rigTop(st.pieces.get(safe)!.secret.face);
 }
 
@@ -109,7 +109,7 @@ async function main() {
   await gs.listen(PORT);
 
   const ca = new Client(`ws://localhost:${PORT}`);
-  const ana = await ca.joinOrCreate('table', { name: 'Ana', packId: 'shortfuse' });
+  const ana = await ca.joinOrCreate('table', { name: 'Ana', packId: 'explodingkittens' });
   await sleep(400);
   const cb = new Client(`ws://localhost:${PORT}`);
   const ben = await cb.joinById(ana.roomId, { name: 'Ben' });
@@ -132,18 +132,18 @@ async function main() {
   ben.send('op', { t: 'sit', seat: 1 });
   await sleep(300);
 
-  console.log('\n=== Short Fuse ===\n\nDealing');
+  console.log('\n=== Exploding Kittens ===\n\nDealing');
   act(ana, 'deal');
   await sleep(700);
   let sa = snap(ana), sb = snap(ben);
-  check('Ana holds seven cards and a Defuse', inZone(sa, 'hand0').length === 8 && !!faceIn(ana, 'hand0', 'DEF'),
+  check('Ana holds seven cards and a Defuse', inZone(sa, 'hand0').length === 8 && !!faceIn(ana, 'hand0', 'DEFUSE'),
     inZone(sa, 'hand0').map((p) => p.secret?.face).join(','));
-  check('Ben holds seven cards and a Defuse', inZone(sb, 'hand1').length === 8 && !!faceIn(ben, 'hand1', 'DEF'));
-  check('nobody was dealt a bomb', !faceIn(ana, 'hand0', 'BOMB') && !faceIn(ben, 'hand1', 'BOMB'));
-  const bombs = [...state().pieces.values()].filter((p) => p.secret.face === 'BOMB' && p.zoneId === 'draw').length;
-  check('two players means one bomb in the pile', bombs === 1, `${bombs}`);
+  check('Ben holds seven cards and a Defuse', inZone(sb, 'hand1').length === 8 && !!faceIn(ben, 'hand1', 'DEFUSE'));
+  check('nobody was dealt a Kitten', !faceIn(ana, 'hand0', 'KITTEN') && !faceIn(ben, 'hand1', 'KITTEN'));
+  const bombs = [...state().pieces.values()].filter((p) => p.secret.face === 'KITTEN' && p.zoneId === 'draw').length;
+  check('two players means one Kitten in the pile', bombs === 1, `${bombs}`);
   check('the pile holds the rest: 32 + a bomb + two spare Defuses', inZone(sa, 'draw').length === 35, `${inZone(sa, 'draw').length}`);
-  check('unused bombs and Defuses are set aside', inZone(sa, 'aside').length === 6, `${inZone(sa, 'aside').length}`);
+  check('unused Kittens and Defuses are set aside', inZone(sa, 'aside').length === 5, `${inZone(sa, 'aside').length}`);
   check("Ana cannot read Ben's hand", readable(sa, 'hand1') === 0);
   check('nobody can read the pile', readable(sa, 'draw') === 0 && readable(sb, 'draw') === 0);
   check('the status says whose turn it is', /Ana to play/.test(sa.status), sa.status);
@@ -159,7 +159,7 @@ async function main() {
   check('Ana drew the card', inZone(snap(ana), 'hand0').length === 9);
 
   console.log('\nNope');
-  const skip = give(1, 'SKP');
+  const skip = give(1, 'SKIP');
   give(0, 'NOPE');
   await sleep(200);
   play(ben, skip);
@@ -177,7 +177,7 @@ async function main() {
   check('a Noped Skip does nothing', /Ben to play/.test(snap(ana).status), snap(ana).status);
 
   console.log('\nAttack');
-  play(ben, give(1, 'ATK'));
+  play(ben, give(1, 'ATTACK'));
   await sleep(300);
   act(ben, 'go');
   await sleep(300);
@@ -189,7 +189,7 @@ async function main() {
 
   console.log('\nPeek');
   const topThree = [...drawStack(snap(ana)).pieceIds].slice(-3).reverse();
-  play(ana, give(0, 'FUT'));
+  play(ana, give(0, 'FUTURE'));
   await sleep(300);
   act(ana, 'go');
   await sleep(400);
@@ -206,7 +206,7 @@ async function main() {
   check('and Ben still cannot read the pile', readable(snap(ben), 'draw') === 0);
 
   console.log('\nFavour');
-  play(ana, give(0, 'FAV'));
+  play(ana, give(0, 'FAVOR'));
   await sleep(300);
   act(ana, 'go');
   await sleep(300);
@@ -221,16 +221,16 @@ async function main() {
     && inZone(snap(ben), 'hand1').length === benBefore - 1);
 
   console.log('\nA pair steals');
-  strip(0, 'JDUCK');
-  const duck = give(0, 'JDUCK');
+  strip(0, 'CAT');
+  const duck = give(0, 'CAT');
   errA.length = 0;
   play(ana, duck);
   await sleep(300);
-  check('one junk card alone is refused', errA.some((e) => /pair/.test(e)), errA.join(' | '));
-  give(0, 'JDUCK');
+  check('one Cat Card alone is refused', errA.some((e) => /pair/.test(e)), errA.join(' | '));
+  give(0, 'CAT');
   play(ana, duck);
   await sleep(300);
-  check('both of the pair are played', inZone(snap(ana), 'discard').filter((p) => p.secret?.face === 'JDUCK').length === 2);
+  check('both of the pair are played', inZone(snap(ana), 'discard').filter((p) => p.secret?.face === 'CAT').length === 2);
   act(ana, 'go');
   await sleep(300);
   const before = inZone(snap(ana), 'hand0').length;
@@ -238,47 +238,47 @@ async function main() {
   await sleep(300);
   check('Ana steals a card', inZone(snap(ana), 'hand0').length === before + 1);
 
-  console.log('\nA bomb, defused');
-  rigTop('BOMB');
+  console.log('\nA Kitten, defused');
+  rigTop('KITTEN');
   draw(ana, 0);
   await sleep(300);
-  check('drawing the bomb demands a Defuse', /must play a Defuse/.test(snap(ana).status), snap(ana).status);
+  check('drawing the Kitten demands a Defuse', /must play a Defuse/.test(snap(ana).status), snap(ana).status);
   errA.length = 0;
-  play(ana, inZone(snap(ana), 'hand0').find((p) => p.secret?.face !== 'DEF' && p.secret?.face !== 'BOMB')!.id);
+  play(ana, inZone(snap(ana), 'hand0').find((p) => p.secret?.face !== 'DEFUSE' && p.secret?.face !== 'KITTEN')!.id);
   await sleep(300);
   check('nothing but a Defuse will do', errA.some((e) => /Defuse/.test(e)), errA.join(' | '));
-  play(ana, faceIn(ana, 'hand0', 'DEF')!);
+  play(ana, faceIn(ana, 'hand0', 'DEFUSE')!);
   await sleep(300);
   errB.length = 0;
   act(ben, 'tuck:0', { stackId: drawStack(snap(ben)).id });
   await sleep(300);
-  check('only Ana may hide the bomb', errB.some((e) => /no bomb/.test(e)), errB.join(' | '));
+  check('only Ana may hide the Kitten', errB.some((e) => /no bomb/.test(e)), errB.join(' | '));
   act(ana, 'tuck:0', { stackId: drawStack(snap(ana)).id });
   await sleep(400);
   const top = drawStack(snap(ana)).pieceIds.slice(-1)[0];
-  check('the bomb is back on top', state().pieces.get(top)?.secret.face === 'BOMB');
+  check('the Kitten is back on top', state().pieces.get(top)?.secret.face === 'KITTEN');
   check('and Ben cannot read it there', !snap(ben).pieces[top].secret?.face);
   check('the turn passes', /Ben to play/.test(snap(ana).status), snap(ana).status);
 
-  console.log('\nA bomb, not defused');
-  strip(1, 'DEF');
+  console.log('\nA Kitten, not defused');
+  strip(1, 'DEFUSE');
   draw(ben, 1);
   await sleep(400);
   sa = snap(ana);
   check('Ben blows up and Ana wins', /Ana wins/.test(sa.status), `${sa.status} — ${logText(sa)}`);
-  check('the bomb is face up on the discard', inZone(sa, 'discard').some((p) => p.secret?.face === 'BOMB'));
+  check('the Kitten is face up on the discard', inZone(sa, 'discard').some((p) => p.secret?.face === 'KITTEN'));
   check("Ben's hand is gone", inZone(sa, 'hand1').length === 0);
 
   console.log('\nReset clears the table');
   ana.send('op', { t: 'resetTable' });
   await sleep(900);
   sa = snap(ana);
-  check('every card is back in the pile', inZone(sa, 'draw').length === 57, `${inZone(sa, 'draw').length}`);
+  check('every card is back in the pile', inZone(sa, 'draw').length === 56, `${inZone(sa, 'draw').length}`);
 
   ana.leave(); ben.leave();
   await sleep(200);
   await gs.gracefullyShutdown(false);
-  console.log(failures ? `\n${failures} FAILED` : '\nAll Short Fuse checks passed.');
+  console.log(failures ? `\n${failures} FAILED` : '\nAll Exploding Kittens checks passed.');
   process.exit(failures ? 1 : 0);
 }
 

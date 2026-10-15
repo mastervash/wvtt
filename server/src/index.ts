@@ -20,6 +20,7 @@ import { hasRoom, pruneOldRooms } from './persistence.js';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PORT = Number(process.env.PORT ?? 2567);
 const IS_PROD = process.env.NODE_ENV === 'production';
+const DECKS_DIR = process.env.DECKS_DIR ?? path.resolve(process.cwd(), 'server/data/decks');
 
 const app = express();
 // Behind nginx/NPM, so the client address arrives in X-Forwarded-For. The port is
@@ -61,6 +62,11 @@ app.use(cors({ origin: IS_PROD ? false : true }));
 app.get('/api/health', (_req, res) => {
   res.json({ ok: true, uptime: process.uptime() });
 });
+
+// Deck artwork is intentionally kept outside Git. The deployment mounts the library
+// read-only here so built-in packs can reference it without embedding multi-megabyte
+// image data in every room packet.
+app.use('/assets/decks', express.static(DECKS_DIR, { fallthrough: false, maxAge: '7d' }));
 
 /**
  * The game picker reads this rather than bundling pack definitions into the client.

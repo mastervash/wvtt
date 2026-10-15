@@ -273,12 +273,12 @@ move.
 | UNO | Match the colour or the symbol. Skips, reverses, draw twos and wilds. |
 | Prompt Party | Fill in the blank; answers are played face down and a rotating judge picks a winner. |
 | Ransom Note | Answer the prompt with the words you were dealt; the judge reads the notes out and picks one. |
-| Short Fuse | Draw until someone blows up. Defuses, attacks, skips, peeks, favours and Nopes. |
+| Exploding Kittens | Choose a base deck and compatible expansions. Play cards, draw, and avoid the Kittens. |
 | Texas Hold'em | Chips, blinds, dealer button; the script runs the betting rounds. |
 | Chess | Snapping 8×8 board with enforced moves, captures and check. |
 
 The home page splits these in two: sandboxes on the left, packs that referee themselves
-on the right. UNO, Prompt Party, Ransom Note and Short Fuse are editable packs that can be
+on the right. UNO, Prompt Party, Ransom Note and Exploding Kittens are editable packs that can be
 copied and rewritten in the editor. UNO ships with the repository's supplied 54-card image
 set; Prompt Party and Ransom Note deliberately use mild starter decks, so swap their lists
 for your group's own in the editor.
@@ -288,11 +288,11 @@ of you, or right-click it and choose **Add to my note**. What you have written i
 to nobody else until you lock it in and the judge reads it out — and it goes back to
 being private the moment the judge moves on to the next note.
 
-In Short Fuse a played card does not happen at once. It waits on the discard while
+In Exploding Kittens a played card does not happen at once. It waits on the discard while
 anyone may answer it with a Nope — and anyone may Nope the Nope — and the player who
-laid it presses **Go** to settle it. Draw from the pile (or press **Draw**) to end your
-turn. Draw a bomb and you must play a Defuse, then right-click the draw pile to hide the
-bomb back in it wherever you like. Favours and matching pairs of junk cards ask you to
+laid it presses **Resolve** to settle it. Draw from the pile (or press **Draw**) to end your
+turn. Draw an Exploding Kitten and you must play a Defuse, then right-click the draw pile to hide the
+Kitten back in it wherever you like. Favors and matching pairs of Cat Cards ask you to
 right-click a card in someone's hand and choose **Pick**.
 
 Chess enforces turn order, legal movement, blocked paths, captures and the rule that you
@@ -301,6 +301,10 @@ enforced — switch rules off to set those up by hand, or to play checkers with 
 pieces.
 
 ## Making a game
+
+Every pack can carry public **Game notes**. Add setup instructions, rules, house rules or
+reference links in the editor's **About this game** section; players open them with the
+**Notes** button at the table.
 
 **Open the pack editor** on the home page, or **Make your own game** in the table menu.
 Four tabs:

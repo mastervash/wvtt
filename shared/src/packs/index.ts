@@ -8,18 +8,20 @@ import { eightsPack } from './eights.js';
 import { unoPack } from './uno.js';
 import { promptPartyPack } from './promptparty.js';
 import { ransomNotePack } from './ransomnote.js';
-import { shortFusePack } from './shortfuse.js';
+import { explodingKittensPack, makeExplodingKittensPack, type ExplodingKittensSelection } from './explodingKittens.js';
 
 export * from './common.js';
 export {
   sandboxPack, pokerPack, dicePack, chessPack, boardPack,
-  eightsPack, unoPack, promptPartyPack, ransomNotePack, shortFusePack,
+  eightsPack, unoPack, promptPartyPack, ransomNotePack, explodingKittensPack,
 };
+export { makeExplodingKittensPack, EXPLODING_KITTENS_BASES, EXPLODING_KITTENS_EXPANSIONS } from './explodingKittens.js';
+export type { ExplodingKittensSelection, ExplodingKittensBase, ExplodingKittensExpansion } from './explodingKittens.js';
 
 /** Packs offered in the room's game picker. All are authored in the public format. */
 export const BUILTIN_PACKS: GamePack[] = [
   sandboxPack, dicePack, boardPack,
-  eightsPack, unoPack, promptPartyPack, ransomNotePack, shortFusePack, pokerPack, chessPack,
+  eightsPack, unoPack, promptPartyPack, ransomNotePack, explodingKittensPack, pokerPack, chessPack,
 ];
 
 /**
@@ -38,6 +40,7 @@ export function packFlavour(pack: GamePack): PackFlavour {
 
 export const DEFAULT_PACK_ID = 'sandbox';
 
-export function getBuiltinPack(id: string): GamePack | undefined {
+export function getBuiltinPack(id: string, options?: ExplodingKittensSelection): GamePack | undefined {
+  if (id === 'explodingkittens') return makeExplodingKittensPack(options);
   return BUILTIN_PACKS.find((p) => p.manifest.id === id);
 }

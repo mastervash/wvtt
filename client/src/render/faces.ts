@@ -515,7 +515,7 @@ export function faceTexture(key: string, src: FaceSource | undefined): THREE.Tex
   const hit = cache.get(key);
   if (hit) return hit;
 
-  if (src.type === 'image') {
+  if (src.type === 'image' || src.type === 'asset') {
     // Draw the supplied bitmap once it decodes; the texture updates in place.
     const [c2, ctx2] = canvas(CARD_PX_W, CARD_PX_H);
     ctx2.fillStyle = '#20202a';
@@ -523,7 +523,7 @@ export function faceTexture(key: string, src: FaceSource | undefined): THREE.Tex
     const tex = finish(c2);
     const img = new Image();
     img.onload = () => { ctx2.drawImage(img, 0, 0, CARD_PX_W, CARD_PX_H); tex.needsUpdate = true; };
-    img.src = src.dataUri;
+    img.src = src.type === 'image' ? src.dataUri : src.path;
     cache.set(key, tex);
     return tex;
   }
@@ -545,7 +545,11 @@ export function faceImage(key: string, src: FaceSource | undefined): string {
   if (!src) return '';
   const hit = imageCache.get(key);
   if (hit) return hit;
-  if (src.type === 'image') { imageCache.set(key, src.dataUri); return src.dataUri; }
+  if (src.type === 'image' || src.type === 'asset') {
+    const url = src.type === 'image' ? src.dataUri : src.path;
+    imageCache.set(key, url);
+    return url;
+  }
   const url = renderFace(src).toDataURL('image/png');
   imageCache.set(key, url);
   return url;

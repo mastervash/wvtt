@@ -1,13 +1,12 @@
 /**
- * Short Fuse rules, as a pack script.
+ * Exploding Kittens rules, as a pack script.
  *
- * On your turn play as many cards as you like, then draw one to end it. Draw a bomb
- * and you are out — unless you play a Defuse, in which case you hide the bomb back in
+ * On your turn play as many cards as you like, then draw one to end it. Draw a Kitten
+ * and you are out — unless you play a Defuse, in which case you hide the Kitten back in
  * the pile wherever you like. Last player standing wins.
  *
- * Face codes: BOMB, DEF (defuse), NOPE, ATK (attack), SKP (skip), FAV (favour),
- * SHF (shuffle), FUT (peek at the top three), and junk cards starting with J, which
- * only do something played as a matching pair.
+ * Face codes: KITTEN, DEFUSE, NOPE, ATTACK, SKIP, FAVOR, SHUFFLE, FUTURE and CAT.
+ * Expansion-only cards keep their printed instructions and are resolved manually.
  *
  * Every card but a Defuse can be Noped, so a played card does not take effect at once:
  * it waits on the discard pile while anyone may answer it with a Nope (and anyone may
@@ -19,19 +18,14 @@
 
 import { SEAT_SPOTS } from '../common.js';
 
-export const SHORT_FUSE_SCRIPT = `
+export const EXPLODING_KITTENS_SCRIPT = `
 var HAND_SPOTS = ${JSON.stringify(SEAT_SPOTS)};
 var HAND_W = 4.2, HAND_H = 1.3;
 
-var NAMES = {
-  BOMB: 'Bomb', DEF: 'Defuse', NOPE: 'Nope', ATK: 'Attack', SKP: 'Skip',
-  FAV: 'Favour', SHF: 'Shuffle', FUT: 'Peek',
-  JDUCK: 'Rubber Duck', JSOCK: 'Sock Puppet', JCONE: 'Traffic Cone',
-  JGNOME: 'Garden Gnome', JTOAST: 'Toaster'
-};
+var NAMES = { KITTEN: 'Exploding Kitten', DEFUSE: 'Defuse', NOPE: 'Nope', ATTACK: 'Attack', SKIP: 'Skip', FAVOR: 'Favor', SHUFFLE: 'Shuffle', FUTURE: 'See the Future', CAT: 'Cat Card' };
 var DEFUSES = 6;
 
-function isJunk(face) { return face.charAt(0) === 'J'; }
+function isJunk(face) { return face === 'CAT'; }
 function nameOf(face) { return NAMES[face] || face; }
 
 /* ---------------- seats and turns ---------------- */
@@ -169,35 +163,35 @@ function onSetup(table, reason) {
   var seats = alive(table);
   if (seats.length < 2) {
     table.status('Two or more players, then press New round');
-    table.log('Short Fuse ready. Take seats and press New round.');
+table.log('Exploding Kittens ready. Take seats and press New game.');
     return;
   }
 
   var pile = drawPile(table);
   for (var i = 0; i < pile.length; i++) {
-    if (pile[i].face === 'BOMB' || pile[i].face === 'DEF') table.insertAt(pile[i].id, 'aside', 0);
+if (pile[i].face === 'KITTEN' || pile[i].face === 'DEFUSE') table.insertAt(pile[i].id, 'aside', 0);
   }
   shuffleDraw(table);
   for (var s = 0; s < seats.length; s++) table.dealTo(seats[s], 7);
 
   for (var d = 0; d < seats.length; d++) {
-    var defuse = firstOfFace(table, 'aside', 'DEF');
+var defuse = firstOfFace(table, 'aside', 'DEFUSE');
     if (defuse) table.moveTo(defuse.id, 'hand' + seats[d]);
   }
   var spare = Math.min(2, DEFUSES - seats.length);
   for (var e = 0; e < spare; e++) {
-    var extra = firstOfFace(table, 'aside', 'DEF');
+var extra = firstOfFace(table, 'aside', 'DEFUSE');
     if (extra) table.insertAt(extra.id, 'draw', 0);
   }
   for (var b = 0; b < seats.length - 1; b++) {
-    var bomb = firstOfFace(table, 'aside', 'BOMB');
+var bomb = firstOfFace(table, 'aside', 'KITTEN');
     if (bomb) table.insertAt(bomb.id, 'draw', 0);
   }
   shuffleDraw(table);
 
   table.setVar('inRound', seats);
   table.setVar('turn', seats[0]);
-  table.log('Short Fuse: ' + (seats.length - 1) + ' bomb' + (seats.length === 2 ? '' : 's') + ' in the pile. Play cards, then draw to end your turn.');
+table.log('Exploding Kittens: ' + (seats.length - 1) + ' Kitten' + (seats.length === 2 ? '' : 's') + ' in the pile. Play cards, then draw to end your turn.');
   announce(table);
 }
 
@@ -229,9 +223,9 @@ function explode(table, seat, bombId) {
 
 /** A card has just gone from the top of the pile into this seat's hand. */
 function landed(table, seat, piece) {
-  if (piece.face !== 'BOMB') { endTurn(table); return; }
-  table.log(nameOfSeat(table, seat) + ' drew a BOMB!');
-  if (!firstOfFace(table, 'hand' + seat, 'DEF')) { explode(table, seat, piece.id); return; }
+if (piece.face !== 'KITTEN') { endTurn(table); return; }
+table.log(nameOfSeat(table, seat) + ' drew an Exploding Kitten!');
+if (!firstOfFace(table, 'hand' + seat, 'DEFUSE')) { explode(table, seat, piece.id); return; }
   table.setVar('waiting', { kind: 'defuse', seat: seat, bomb: piece.id });
   table.status(nameOfSeat(table, seat) + ' must play a Defuse');
 }
@@ -264,10 +258,10 @@ function settle(table) {
   }
 
   var face = pending.face;
-  if (face === 'SKP') {
+if (face === 'SKIP') {
     table.log(who + ' skips the draw.');
     endTurn(table);
-  } else if (face === 'ATK') {
+} else if (face === 'ATTACK') {
     var left = table.getVar('turnsLeft') || 1;
     var victim = nextAfter(table, pending.seat);
     // Attacking while under attack passes on what was left, plus two.
@@ -276,11 +270,11 @@ function settle(table) {
     table.setVar('turnsLeft', owed);
     table.log(who + ' attacks. ' + nameOfSeat(table, victim) + ' must take ' + owed + ' turns.');
     announce(table);
-  } else if (face === 'SHF') {
+} else if (face === 'SHUFFLE') {
     shuffleDraw(table);
     table.log(who + ' shuffles the draw pile.');
     announce(table);
-  } else if (face === 'FUT') {
+} else if (face === 'FUTURE') {
     var pile = drawPile(table);
     var ids = [];
     for (var i = pile.length - 1; i >= 0 && ids.length < 3; i--) ids.push(pile[i].id);
@@ -288,10 +282,13 @@ function settle(table) {
     table.setVar('waiting', { kind: 'peek', seat: pending.seat, ids: ids });
     table.log(who + ' peeks at the top ' + ids.length + ' cards.');
     table.status(who + ' is peeking — press Go to put them back');
-  } else if (face === 'FAV' || isJunk(face)) {
-    var kind = face === 'FAV' ? 'favour' : 'steal';
+} else if (face === 'FAVOR' || isJunk(face)) {
+var kind = face === 'FAVOR' ? 'favour' : 'steal';
     table.setVar('waiting', { kind: kind, seat: pending.seat });
     table.status(who + ': right-click a card in someone’s hand › Pick');
+  } else {
+    table.log(who + ' resolves the printed effect of that expansion card.');
+    announce(table);
   }
 }
 
@@ -415,7 +412,7 @@ function validateMove(table, move) {
     var who = nameOfSeat(table, seat);
 
     if (waiting && waiting.kind === 'defuse' && waiting.seat === seat) {
-      if (card.face !== 'DEF') return table.reject('Play a Defuse — you are holding a bomb.');
+    if (card.face !== 'DEFUSE') return table.reject('Play a Defuse — you are holding an Exploding Kitten.');
       table.setVar('waiting', { kind: 'hide', seat: seat, bomb: waiting.bomb });
       table.log(who + ' defuses the bomb.');
       if (drawCount(table) <= 1) { hideBomb(table, seat, waiting.bomb, 'random'); return; }
@@ -438,8 +435,8 @@ function validateMove(table, move) {
     if (seat !== turn) return table.reject('It is ' + nameOfSeat(table, turn) + "'s turn. Only a Nope can be played now.");
     if (pending) return table.reject('Press Go first — your last card has not happened yet.');
     if (waiting) return table.reject('Finish what you are doing first.');
-    if (card.face === 'BOMB') return table.reject('A bomb cannot be played.');
-    if (card.face === 'DEF') return table.reject('Save your Defuse for when you draw a bomb.');
+    if (card.face === 'KITTEN') return table.reject('An Exploding Kitten cannot be played.');
+    if (card.face === 'DEFUSE') return table.reject('Save your Defuse for when you draw an Exploding Kitten.');
 
     if (isJunk(card.face)) {
       var hand = table.piecesIn('hand' + seat);

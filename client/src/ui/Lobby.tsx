@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import type { ExplodingKittensBase, ExplodingKittensExpansion } from '@wvtt/shared';
 import { apiUrl, forgetRecentRoom, recentRooms, useStore, type RecentRoom } from '../net/store';
 
 /**
@@ -32,10 +33,18 @@ const FALLBACK: PackCard[] = [
   { id: 'uno', name: 'UNO', description: 'Match colour or symbol; skips, reverses, draw twos and wilds change the turn.', flavour: 'scripted', minSeats: 2, maxSeats: 6 },
   { id: 'promptparty', name: 'Prompt Party', description: 'Fill in the blank anonymously, then let the judge reveal and choose the funniest answer.', flavour: 'scripted', minSeats: 3, maxSeats: 6 },
   { id: 'ransomnote', name: 'Ransom Note', description: 'Build an answer from your dealt words. The judge reads them out and picks the round winner.', flavour: 'scripted', minSeats: 3, maxSeats: 6 },
-  { id: 'shortfuse', name: 'Short Fuse', description: 'Take turns drawing cards; a bomb needs a Defuse. Last player standing wins.', flavour: 'scripted', minSeats: 2, maxSeats: 6 },
+  { id: 'explodingkittens', name: 'Exploding Kittens', description: 'Play cards, then draw; avoid the Kittens and be the last player standing.', flavour: 'scripted', minSeats: 2, maxSeats: 5 },
   { id: 'poker', name: "Texas Hold'em", description: 'Hold’em with chips, blinds and a dealer button. Switch rules off for a casual chip table.', flavour: 'scripted', minSeats: 2, maxSeats: 6 },
   { id: 'chess', name: 'Chess', description: 'A snapping 8×8 board. Enforce legal moves, or turn rules off to analyse a position.', flavour: 'scripted', minSeats: 2, maxSeats: 2 },
 ];
+
+const EK_BASES = [
+  ['exploding-kittens-original-edition', 'Original Edition'], ['exploding-kittens-2-player-edition', '2-Player Edition'], ['exploding-kittens-cat-burglar-edition', 'Cat Burglar Edition'], ['exploding-kittens-nsfw-edition', 'NSFW Edition'], ['exploding-kittens-party-pack-edition', 'Party Pack Edition'], ['exploding-kittens-recipes-for-disaster', 'Recipes for Disaster'], ['exploding-kittens-good-vs-evil', 'Good vs Evil'], ['exploding-kittens-zombie-kittens', 'Zombie Kittens'],
+] as const;
+const EK_EXPANSIONS = [
+  ['imploding-kittens-expansion', 'Imploding Kittens'], ['streaking-kittens-expansion', 'Streaking Kittens'], ['barking-kittens-expansion', 'Barking Kittens'],
+] as const;
+const EK_EXPANDABLE = new Set<string>(EK_BASES.slice(0, 5).map(([id]) => id));
 
 /**
  * Which column a pack belongs in.
@@ -61,6 +70,8 @@ export function Lobby() {
   const [name, setName] = useState(() => localStorage.getItem('wvtt:name') ?? '');
   const [code, setCode] = useState(() => new URLSearchParams(location.search).get('room') ?? '');
   const [packId, setPackId] = useState('sandbox');
+  const [ekBase, setEkBase] = useState<ExplodingKittensBase>(EK_BASES[0][0]);
+  const [ekExpansions, setEkExpansions] = useState<ExplodingKittensExpansion[]>([]);
   const [packs, setPacks] = useState<PackCard[]>(FALLBACK);
   const [recent, setRecent] = useState<RecentRoom[]>(() => recentRooms());
   const setPendingEditor = useStore((s) => s.setPendingEditor);
@@ -179,6 +190,37 @@ export function Lobby() {
           {column('Guided games', 'The table can run turns and reject illegal moves. You can still switch enforcement off at any time.', scripted)}
         </div>
 
+        {packId === 'explodingkittens' && (
+          <section className="deck-picker" aria-label="Exploding Kittens deck selection">
+            <h2>Choose your deck</h2>
+            <p className="hint">Pick one base deck. Original-style editions can add any of the compatible expansions.</p>
+            <label>
+              Base deck
+              <select
+                value={ekBase}
+                onChange={(e) => { setEkBase(e.target.value as ExplodingKittensBase); setEkExpansions([]); }}
+              >
+                {EK_BASES.map(([id, label]) => <option key={id} value={id}>{label}</option>)}
+              </select>
+            </label>
+            <div className="deck-expansions">
+              <span>Expansions</span>
+              {EK_EXPANSIONS.map(([id, label]) => (
+                <label className="check" key={id}>
+                  <input
+                    type="checkbox"
+                    disabled={!EK_EXPANDABLE.has(ekBase)}
+                    checked={ekExpansions.includes(id)}
+                    onChange={(e) => setEkExpansions((current) => e.target.checked ? [...current, id] : current.filter((entry) => entry !== id))}
+                  />
+                  {label}
+                </label>
+              ))}
+              {!EK_EXPANDABLE.has(ekBase) && <p className="hint">This standalone deck already contains its own card mix.</p>}
+            </div>
+          </section>
+        )}
+
         {recent.length > 0 && (
           <div className="recent">
             <h2>Tables you have been at</h2>
@@ -230,7 +272,7 @@ export function Lobby() {
           <button
             className="primary"
             disabled={busy}
-            onClick={() => connect({ name: name || 'Guest', packId })}
+            onClick={() => connect({ name: name || 'Guest', packId, deckSelection: packId === 'explodingkittens' ? { base: ekBase, expansions: ekExpansions } : undefined })}
           >
             {busy ? 'Starting…' : 'Create table'}
           </button>
