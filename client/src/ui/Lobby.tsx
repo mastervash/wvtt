@@ -25,16 +25,16 @@ interface PackCard {
  * built-ins everyone has rather than an empty column.
  */
 const FALLBACK: PackCard[] = [
-  { id: 'sandbox', name: 'Card Sandbox', description: 'A 52-card deck and no rules at all.', flavour: 'sandbox', minSeats: 1, maxSeats: 6 },
-  { id: 'dice', name: 'Dice Tray', description: 'Full polyhedral set, rolled by the server.', flavour: 'sandbox', minSeats: 1, maxSeats: 6 },
-  { id: 'board', name: 'Blank Board', description: 'A grid and tokens. Build your own game.', flavour: 'sandbox', minSeats: 1, maxSeats: 6 },
-  { id: 'eights', name: 'Crazy Eights', description: 'Match the suit or the rank. Eights are wild.', flavour: 'scripted', minSeats: 2, maxSeats: 6 },
-  { id: 'wildcolours', name: 'Wild Colours', description: 'Colours, skips, reverses and wilds.', flavour: 'scripted', minSeats: 2, maxSeats: 6 },
-  { id: 'promptparty', name: 'Prompt Party', description: 'Fill in the blank; the judge picks a winner.', flavour: 'scripted', minSeats: 3, maxSeats: 6 },
-  { id: 'ransomnote', name: 'Ransom Note', description: 'Answer the prompt with the words you were dealt.', flavour: 'scripted', minSeats: 3, maxSeats: 6 },
-  { id: 'shortfuse', name: 'Short Fuse', description: 'Draw until someone blows up. Defuse, dodge and Nope.', flavour: 'scripted', minSeats: 2, maxSeats: 6 },
-  { id: 'poker', name: "Texas Hold'em", description: 'Felt, chips, blinds and a dealer button.', flavour: 'scripted', minSeats: 2, maxSeats: 6 },
-  { id: 'chess', name: 'Chess', description: 'Snapping board, optional rules enforcement.', flavour: 'scripted', minSeats: 2, maxSeats: 2 },
+  { id: 'sandbox', name: 'Card Sandbox', description: 'A 52-card deck with no turns or rules. Shuffle, deal and make your own game.', flavour: 'sandbox', minSeats: 1, maxSeats: 6 },
+  { id: 'dice', name: 'Dice Tray', description: 'A full polyhedral set. Rolls happen on the server so every player sees the same result.', flavour: 'sandbox', minSeats: 1, maxSeats: 6 },
+  { id: 'board', name: 'Blank Board', description: 'A snapping grid, coloured tokens and dice. A practical starting point for a homebrew game.', flavour: 'sandbox', minSeats: 1, maxSeats: 6 },
+  { id: 'eights', name: 'Crazy Eights', description: 'Match suit or rank; eights are wild. Empty your hand first to win.', flavour: 'scripted', minSeats: 2, maxSeats: 6 },
+  { id: 'wildcolours', name: 'Wild Colours', description: 'Match colour or symbol while skips, reverses, draws and wilds change the round.', flavour: 'scripted', minSeats: 2, maxSeats: 6 },
+  { id: 'promptparty', name: 'Prompt Party', description: 'Fill in the blank anonymously, then let the judge reveal and choose the funniest answer.', flavour: 'scripted', minSeats: 3, maxSeats: 6 },
+  { id: 'ransomnote', name: 'Ransom Note', description: 'Build an answer from your dealt words. The judge reads them out and picks the round winner.', flavour: 'scripted', minSeats: 3, maxSeats: 6 },
+  { id: 'shortfuse', name: 'Short Fuse', description: 'Take turns drawing cards; a bomb needs a Defuse. Last player standing wins.', flavour: 'scripted', minSeats: 2, maxSeats: 6 },
+  { id: 'poker', name: "Texas Hold'em", description: 'Hold’em with chips, blinds and a dealer button. Switch rules off for a casual chip table.', flavour: 'scripted', minSeats: 2, maxSeats: 6 },
+  { id: 'chess', name: 'Chess', description: 'A snapping 8×8 board. Enforce legal moves, or turn rules off to analyse a position.', flavour: 'scripted', minSeats: 2, maxSeats: 2 },
 ];
 
 /**
@@ -118,10 +118,14 @@ export function Lobby() {
               className={`pack ${packId === p.id ? 'on' : ''}`}
               onClick={() => setPackId(p.id)}
               type="button"
+              aria-pressed={packId === p.id}
             >
               <strong>{p.name}</strong>
               <span className="desc">{p.description}</span>
-              <span className="seats-line">{seatsLine(p)}</span>
+              <span className="pack-foot">
+                <span className="seats-line">{seatsLine(p)}</span>
+                {packId === p.id && <span className="selected-label">Selected</span>}
+              </span>
             </button>
           ))}
         </div>
@@ -171,8 +175,8 @@ export function Lobby() {
             are different propositions and asking someone to spot the difference from a
             single grid of tiles never worked. */}
         <div className="split games">
-          {column('Sandbox', 'Kit with no rules attached. Move anything anywhere.', sandbox)}
-          {column('Scripted games', 'Rules enforced by the table. Switch enforcement off at any time.', scripted)}
+          {column('Open tables', 'Pieces and a table, with no turn order or rule referee. Best for free play and house rules.', sandbox)}
+          {column('Guided games', 'The table can run turns and reject illegal moves. You can still switch enforcement off at any time.', scripted)}
         </div>
 
         {recent.length > 0 && (

@@ -103,6 +103,20 @@ npm run build      # build client and server
 npm start          # serve the built client and the game from one port
 ```
 
+### Make a game
+
+Choose **Make your own game** from the lobby, then begin with a card, dice or board
+starter (or copy the table already open). The editor keeps a draft in this browser and
+shows the same pack checks the server will run. On the **Table** tab, choose the pieces,
+drag labelled zones onto the map, and say what should be placed at the start. An
+**owner-only** zone is a private hand: its contents are not sent to other players.
+
+The **Describe it** tab can produce a prompt for an AI assistant. Paste its JSON reply
+back into the editor, inspect any reported problems, and press **Play it on this table**.
+Scripts are optional; they can read the entire table to enforce rules, so only load a
+script you trust. Downloaded `.wvtt.json` files are ordinary pack JSON and can be
+shared or imported later.
+
 ## How it is put together
 
 ```

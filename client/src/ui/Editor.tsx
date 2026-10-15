@@ -58,6 +58,55 @@ const BLANK: GamePack = {
 };
 
 /**
+ * Useful first drafts for authors who know the kind of game they want, but not yet
+ * every field in the pack format. They are deliberately ordinary packs: opening one
+ * teaches the same vocabulary it puts on the table.
+ */
+function starterPack(kind: 'cards' | 'dice' | 'board'): GamePack {
+  const base = structuredClone(BLANK);
+
+  if (kind === 'cards') {
+    return {
+      ...base,
+      manifest: { ...base.manifest, id: 'card-game', name: 'My Card Game', description: 'A card game for friends.' },
+      components: standardDeck(false),
+      zones: [
+        ...base.zones,
+        { id: 'discard', label: 'Discard pile', ownerSeat: null, visibility: 'public', x: 3.2, z: -1.6, w: 1.1, h: 1.4, layout: 'stack' },
+      ],
+      setup: [{ componentIds: ['deck:standard52'], as: 'stack', zoneId: null, x: -3.2, z: -1.6, faceUp: false, shuffled: true }],
+    };
+  }
+
+  if (kind === 'dice') {
+    return {
+      ...base,
+      manifest: { ...base.manifest, id: 'dice-game', name: 'My Dice Game', description: 'A dice game for friends.', tableColor: '#3b2f4a' },
+      components: diceSet([4, 6, 8, 10, 12, 20]),
+      zones: [
+        ...base.zones.filter((z) => !z.id.startsWith('hand')),
+        { id: 'tray', label: 'Dice tray', ownerSeat: null, visibility: 'public', x: 0, z: 0, w: 5.5, h: 3.5, layout: 'free' },
+      ],
+      setup: [{ componentIds: ['d4', 'd6', 'd8', 'd10', 'd12', 'd20'], as: 'loose', zoneId: 'tray', x: 0, z: 0, faceUp: true, shuffled: false }],
+    };
+  }
+
+  return {
+    ...base,
+    manifest: { ...base.manifest, id: 'board-game', name: 'My Board Game', description: 'A board game for friends.', tableColor: '#2f4a5a' },
+    components: [...tokenSet(), ...diceSet([6])],
+    zones: [
+      ...base.zones.filter((z) => !z.id.startsWith('hand')),
+      { id: 'board', label: 'Board', ownerSeat: null, visibility: 'public', x: 0, z: 0, w: 6, h: 6, layout: 'grid', gridCols: 8, gridRows: 8, checkered: true },
+    ],
+    setup: [
+      { componentIds: ['token0', 'token1', 'token2', 'token3'], as: 'loose', zoneId: 'board', x: 0, z: 0, faceUp: true, shuffled: false },
+      { componentIds: ['repeat:d6:2'], as: 'loose', zoneId: null, x: 4.5, z: 3.3, faceUp: true, shuffled: false },
+    ],
+  };
+}
+
+/**
  * Where the work in progress is kept between sessions.
  *
  * A pack takes real effort to write, and the editor used to lose all of it the moment
@@ -176,6 +225,21 @@ export function Editor({ onClose }: { onClose: () => void }) {
     setPack((p) => ({ ...p, manifest: { ...p.manifest, ...patch } }));
   }
 
+  /** Keep the player range valid as it is edited instead of reporting it later. */
+  function setMinSeats(value: number) {
+    setPack((p) => {
+      const minSeats = Math.min(12, Math.max(1, value || 1));
+      return { ...p, manifest: { ...p.manifest, minSeats, maxSeats: Math.max(minSeats, p.manifest.maxSeats) } };
+    });
+  }
+
+  function setMaxSeats(value: number) {
+    setPack((p) => {
+      const maxSeats = Math.min(12, Math.max(1, value || 1));
+      return { ...p, manifest: { ...p.manifest, minSeats: Math.min(p.manifest.minSeats, maxSeats), maxSeats } };
+    });
+  }
+
   function copy(text: string, what: string) {
     navigator.clipboard?.writeText(text).then(
       () => showToast(`${what} copied.`),
@@ -223,6 +287,18 @@ export function Editor({ onClose }: { onClose: () => void }) {
     setActiveZone(null);
     setTab('table');
     showToast(`Copied "${livePack.manifest.name}". Change anything you like.`);
+  }
+
+  function startWith(kind: 'cards' | 'dice' | 'board') {
+    setPack(starterPack(kind));
+    setActiveZone(null);
+    setTab('table');
+    showToast(`Started a ${kind === 'cards' ? 'card' : kind === 'dice' ? 'dice' : 'board'} game. Make it yours.`);
+  }
+
+  function hasComponents(defs: ComponentDef[]) {
+    const ids = new Set(pack.components.map((component) => component.id));
+    return defs.every((component) => ids.has(component.id));
   }
 
   function importJson(text: string) {
@@ -277,7 +353,7 @@ export function Editor({ onClose }: { onClose: () => void }) {
                 canCopyTable={!!livePack}
                 tableName={livePack?.manifest.name ?? ''}
                 onFromTable={startFromTable}
-                onByHand={() => setTab('table')}
+                onStarter={startWith}
                 onPaste={() => { setRaw(''); setRawOpen(true); }}
               />
             )}
@@ -311,13 +387,13 @@ export function Editor({ onClose }: { onClose: () => void }) {
                 <div className="row">
                   <input
                     type="number" min={1} max={12} value={pack.manifest.minSeats}
-                    onChange={(e) => patchManifest({ minSeats: Number(e.target.value) })}
+                    onChange={(e) => setMinSeats(Number(e.target.value))}
                     style={{ maxWidth: 90 }}
                   />
                   <span className="to">to</span>
                   <input
                     type="number" min={1} max={12} value={pack.manifest.maxSeats}
-                    onChange={(e) => patchManifest({ maxSeats: Number(e.target.value) })}
+                    onChange={(e) => setMaxSeats(Number(e.target.value))}
                     style={{ maxWidth: 90 }}
                   />
                 </div>
@@ -406,13 +482,16 @@ export function Editor({ onClose }: { onClose: () => void }) {
 
             <section className="card">
               <h4>Pieces <span className="count">{pack.components.length}</span></h4>
-              <p className="hint" style={{ marginTop: 0 }}>Press a kit to add it. Adding twice does nothing.</p>
+              <p className="hint" style={{ marginTop: 0 }}>
+                Choose a kit to add it. Kits already in this pack are marked; choose what appears
+                at the start in Setup below.
+              </p>
               <div className="chips">
-                <button onClick={() => addComponents(standardDeck(false), 'a 52-card deck')}>52-card deck</button>
-                <button onClick={() => addComponents(standardDeck(true), 'a deck with jokers')}>Deck with jokers</button>
-                <button onClick={() => addComponents(chipSet(), 'poker chips')}>Chips</button>
-                <button onClick={() => addComponents(diceSet(), 'dice')}>Dice</button>
-                <button onClick={() => addComponents(tokenSet(), 'tokens')}>Tokens</button>
+                <button className={hasComponents(standardDeck(false)) ? 'on' : ''} onClick={() => addComponents(standardDeck(false), 'a 52-card deck')}>52-card deck</button>
+                <button className={hasComponents(standardDeck(true)) ? 'on' : ''} onClick={() => addComponents(standardDeck(true), 'a deck with jokers')}>Deck with jokers</button>
+                <button className={hasComponents(chipSet()) ? 'on' : ''} onClick={() => addComponents(chipSet(), 'poker chips')}>Chips</button>
+                <button className={hasComponents(diceSet()) ? 'on' : ''} onClick={() => addComponents(diceSet(), 'dice')}>Dice</button>
+                <button className={hasComponents(tokenSet()) ? 'on' : ''} onClick={() => addComponents(tokenSet(), 'tokens')}>Tokens</button>
                 <button
                   className="danger-text"
                   disabled={pack.components.length === 0}
@@ -592,12 +671,12 @@ function Pills({ label, list, value, onChange }: {
   );
 }
 
-/** Shown only on an empty pack: three ways in, instead of an empty form. */
-function StartPoints({ canCopyTable, tableName, onFromTable, onByHand, onPaste }: {
+/** Shown only on an empty pack: useful games to edit, not a blank configuration form. */
+function StartPoints({ canCopyTable, tableName, onFromTable, onStarter, onPaste }: {
   canCopyTable: boolean;
   tableName: string;
   onFromTable: () => void;
-  onByHand: () => void;
+  onStarter: (kind: 'cards' | 'dice' | 'board') => void;
   onPaste: () => void;
 }) {
   return (
@@ -610,13 +689,21 @@ function StartPoints({ canCopyTable, tableName, onFromTable, onByHand, onPaste }
             : 'No pack loaded yet.'}
         </span>
       </button>
+      <button className="start" onClick={() => onStarter('cards')}>
+        <strong>Start a card game</strong>
+        <span>A shuffled deck, two private hands, a play area and a discard pile.</span>
+      </button>
+      <button className="start" onClick={() => onStarter('dice')}>
+        <strong>Start a dice game</strong>
+        <span>A full dice set and a public tray, ready for your rules or house rules.</span>
+      </button>
+      <button className="start" onClick={() => onStarter('board')}>
+        <strong>Start a board game</strong>
+        <span>An 8×8 board, coloured tokens and two dice — easy to reshape or extend.</span>
+      </button>
       <button className="start" onClick={onPaste}>
         <strong>Paste a pack</strong>
         <span>Someone sent you one, or an assistant wrote you one.</span>
-      </button>
-      <button className="start" onClick={onByHand}>
-        <strong>Build it by hand</strong>
-        <span>Pick the pieces and lay out the table yourself.</span>
       </button>
     </div>
   );
@@ -737,6 +824,7 @@ function TableMap({ zones, setup, active, felt, onActivate, onMove }: {
           </g>
         ))}
       </svg>
+      <p className="map-help">Drag a labelled area to position it. Select an area below to highlight it here.</p>
       <p className="map-legend">
         <span className="k" style={{ background: '#5ac8fa' }} /> owner only
         <span className="k" style={{ background: '#e8e4da' }} /> public
@@ -795,6 +883,27 @@ function ZoneList({ zones, active, onActivate, onChange }: {
   function patch(i: number, p: Partial<ZoneDef>) {
     onChange(zones.map((z, j) => (i === j ? { ...z, ...p } : z)));
   }
+
+  function setVisibility(i: number, visibility: ZoneDef['visibility']) {
+    const zone = zones[i];
+    // An owner-only area without an owner leaks intent into an invalid configuration.
+    // Give it the first seat when it becomes private; authors can choose another seat
+    // in the next control without having to resolve an unrelated validation error.
+    patch(i, {
+      visibility,
+      ownerSeat: visibility === 'owner' && zone.ownerSeat == null ? 0 : zone.ownerSeat,
+    });
+  }
+
+  function setOwner(i: number, ownerSeat: number | null) {
+    const zone = zones[i];
+    patch(i, {
+      ownerSeat,
+      // Shared and owner-only describe incompatible things. Returning to shared makes
+      // the visibility public rather than silently leaving a private zone ownerless.
+      visibility: ownerSeat == null && zone.visibility === 'owner' ? 'public' : zone.visibility,
+    });
+  }
   /** Small numeric cell. Table coordinates are fractional, so steps are fine-grained. */
   const num = (
     value: number, onValue: (n: number) => void, title: string, step = 0.1,
@@ -825,7 +934,7 @@ function ZoneList({ zones, active, onActivate, onChange }: {
         <div className={`zone-block ${active === z.id ? 'on' : ''}`} key={i} onPointerDown={() => onActivate(z.id)}>
           <div className="zone-row">
             <input value={z.label} onChange={(e) => patch(i, { label: e.target.value })} placeholder="What it is called" />
-            <select value={z.visibility} onChange={(e) => patch(i, { visibility: e.target.value as ZoneDef['visibility'] })}>
+            <select value={z.visibility} aria-label="Who can see this area" onChange={(e) => setVisibility(i, e.target.value as ZoneDef['visibility'])}>
               <option value="public">anyone can see it</option>
               <option value="owner">owner only</option>
               <option value="hidden">nobody can see it</option>
@@ -834,7 +943,7 @@ function ZoneList({ zones, active, onActivate, onChange }: {
             <select
               value={z.ownerSeat ?? -1}
               aria-label="Owning seat"
-              onChange={(e) => patch(i, { ownerSeat: Number(e.target.value) < 0 ? null : Number(e.target.value) })}
+              onChange={(e) => setOwner(i, Number(e.target.value) < 0 ? null : Number(e.target.value))}
             >
               <option value={-1}>shared</option>
               {Array.from({ length: 8 }, (_, s) => <option key={s} value={s}>seat {s + 1}</option>)}

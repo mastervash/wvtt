@@ -190,13 +190,32 @@ input:focus, textarea:focus, select:focus {
 .colblurb { margin: -4px 0 4px; }
 /* Two lines of blurb is enough to choose by. Left unclamped, five scripted games push
    the Create table button below the fold on a laptop. */
-.split.games .pack { padding: 10px 12px; gap: 2px; }
+.split.games .pack {
+  position: relative; min-height: 84px;
+  padding: 11px 12px 10px; gap: 3px;
+  /* A restrained surface gradient keeps a long game list from becoming one flat slab. */
+  background: linear-gradient(135deg, #232a33, #1d232b);
+}
 .split.games .pack .desc {
   display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2;
   overflow: hidden;
 }
+.pack-foot { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: auto; }
 .seats-line { font-size: 11px; color: var(--muted); }
-.pack.on .seats-line { color: #0b2531; }
+/* The selected game is important, but should retain the reading contrast of a card,
+   rather than becoming a solid flat blue block. */
+.split.games .pack.on {
+  background: linear-gradient(135deg, #58c8f5, #43acd7);
+  border-color: #87ddff; color: #06131a;
+  box-shadow: inset 0 1px 0 #ffffff70, 0 6px 16px #5ac8fa33;
+}
+.pack.on .desc, .pack.on .seats-line { color: #12323e; }
+.selected-label {
+  flex: 0 0 auto; padding: 2px 7px; border-radius: 999px;
+  background: #07344724; border: 1px solid #07344745;
+  color: #082633; font-size: 10px; font-weight: 700; letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
 
 /* Tables this browser has been at, and the way back into them. */
 .recent { margin-top: 20px; padding-top: 18px; border-top: 1px solid var(--line); }
@@ -553,7 +572,9 @@ label.check input[type="checkbox"] { width: auto; flex: 0 0 auto; margin: 0; }
 .editor > header {
   display: flex; align-items: center; gap: 14px;
   padding: 10px 12px; padding-top: max(10px, env(safe-area-inset-top));
-  border-bottom: 1px solid var(--line); background: var(--panel);
+  border-bottom: 1px solid var(--line);
+  background: linear-gradient(110deg, #1c222a, var(--panel));
+  box-shadow: 0 5px 18px #00000021;
 }
 .editor-title { display: flex; flex-direction: column; line-height: 1.2; min-width: 0; }
 .editor-title strong { font-size: 15px; }
@@ -565,6 +586,7 @@ label.check input[type="checkbox"] { width: auto; flex: 0 0 auto; margin: 0; }
 }
 .editor > header nav { display: flex; gap: 5px; margin-left: 8px; flex-wrap: wrap; }
 .editor > header nav button { font-size: 13px; padding: 8px 12px; }
+.editor > header nav button.on { box-shadow: 0 2px 10px #5ac8fa2e; }
 .editor > header .icon { margin-left: auto; }
 
 .editor-body {
@@ -800,10 +822,11 @@ select {
 /* Three ways in, shown only while the pack is still empty. */
 .starts { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 10px; }
 .start {
-  text-align: left; display: flex; flex-direction: column; gap: 4px; padding: 14px;
-  background: var(--panel); border: 1px solid var(--line-lit);
+  text-align: left; display: flex; flex-direction: column; gap: 5px; padding: 14px;
+  min-height: 106px; background: linear-gradient(140deg, #202731, #171b21);
+  border: 1px solid var(--line-lit);
 }
-.start strong { font-size: 14px; }
+.start strong { font-size: 14px; letter-spacing: 0.01em; }
 .start span { font-size: 12px; color: var(--muted); font-weight: 400; }
 .start:hover:not(:disabled) { transform: translateY(-2px); box-shadow: var(--lift-2); border-color: var(--accent-dim); }
 .start:active:not(:disabled) { transform: translateY(0); }
@@ -871,6 +894,7 @@ select {
   margin: 0 auto; display: flex; flex-wrap: wrap; align-items: center; gap: 6px;
   font-size: 11px; color: var(--muted);
 }
+.map-help { margin: 0; text-align: center; color: var(--muted); font-size: 12px; }
 .map-legend .k {
   width: 10px; height: 10px; border-radius: 2px; display: inline-block; margin-left: 8px;
 }
