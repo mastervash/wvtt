@@ -153,7 +153,7 @@ function gatherDeck(table) {
  * in, with a couple of spare Defuses, and the rest stay out of play.
  *
  * The reason is 'reset' when a player pressed Reset table, which must leave the table
- * cleared rather than dealt. See the note in Wild Colours.
+ * cleared rather than dealt. See the note in UNO.
  */
 function onSetup(table, reason) {
   clearRound(table);

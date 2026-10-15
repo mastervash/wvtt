@@ -37,7 +37,7 @@ Three layers, and the boundary between them is the point:
 - **Layer 2, the rules script** — optional sandboxed JavaScript that can veto moves.
   Per-room switch: off / advisory / enforced.
 
-Built-in packs (card sandbox, dice tray, blank board, Crazy Eights, Wild Colours, Prompt
+Built-in packs (card sandbox, dice tray, blank board, Crazy Eights, UNO, Prompt
 Party, Ransom Note, Short Fuse, Hold'em, chess) are authored in exactly
 the format users get from the in-app editor. There is no privileged built-in path — if a
 built-in needs a capability, the format gains it and every user pack gains it too.

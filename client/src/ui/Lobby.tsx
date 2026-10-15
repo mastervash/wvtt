@@ -5,7 +5,7 @@ import { apiUrl, forgetRecentRoom, recentRooms, useStore, type RecentRoom } from
  * What the picker shows for one game.
  *
  * Fetched from the server rather than bundled: the pack list is the server's business,
- * and a pack's components — 108 cards, or a hundred lines of prompt text — have no
+ * and a pack's components — a full deck, or a hundred lines of prompt text — have no
  * reason to be downloaded by someone who is still choosing what to play.
  */
 interface PackCard {
@@ -29,7 +29,7 @@ const FALLBACK: PackCard[] = [
   { id: 'dice', name: 'Dice Tray', description: 'A full polyhedral set. Rolls happen on the server so every player sees the same result.', flavour: 'sandbox', minSeats: 1, maxSeats: 6 },
   { id: 'board', name: 'Blank Board', description: 'A snapping grid, coloured tokens and dice. A practical starting point for a homebrew game.', flavour: 'sandbox', minSeats: 1, maxSeats: 6 },
   { id: 'eights', name: 'Crazy Eights', description: 'Match suit or rank; eights are wild. Empty your hand first to win.', flavour: 'scripted', minSeats: 2, maxSeats: 6 },
-  { id: 'wildcolours', name: 'Wild Colours', description: 'Match colour or symbol while skips, reverses, draws and wilds change the round.', flavour: 'scripted', minSeats: 2, maxSeats: 6 },
+  { id: 'uno', name: 'UNO', description: 'Match colour or symbol; skips, reverses, draw twos and wilds change the turn.', flavour: 'scripted', minSeats: 2, maxSeats: 6 },
   { id: 'promptparty', name: 'Prompt Party', description: 'Fill in the blank anonymously, then let the judge reveal and choose the funniest answer.', flavour: 'scripted', minSeats: 3, maxSeats: 6 },
   { id: 'ransomnote', name: 'Ransom Note', description: 'Build an answer from your dealt words. The judge reads them out and picks the round winner.', flavour: 'scripted', minSeats: 3, maxSeats: 6 },
   { id: 'shortfuse', name: 'Short Fuse', description: 'Take turns drawing cards; a bomb needs a Defuse. Last player standing wins.', flavour: 'scripted', minSeats: 2, maxSeats: 6 },

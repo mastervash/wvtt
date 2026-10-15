@@ -32,7 +32,7 @@ const state = () => page.evaluate(() => window.__wvtt);
 console.log('\nMaking a table and playing a little');
 await page.goto('http://localhost:5173/', { waitUntil: 'networkidle' });
 await page.fill('input[placeholder="Guest"]', 'Vash');
-await page.click('button:has-text("Wild Colours")');
+await page.click('button:has-text("UNO")');
 await page.click('button:has-text("Create table")');
 await page.waitForSelector('.topbar', { timeout: 20000 });
 await page.waitForTimeout(2500);
@@ -55,7 +55,7 @@ console.log('\nThe lobby remembers where you have been');
 const rows = await page.locator('.recent-row').count();
 check('the table is listed on the lobby', rows >= 1, `${rows} rows`);
 const label = (await page.locator('.recent-row .rejoin').first().innerText()).replace('\n', ' · ');
-check('it is listed by code and game', label.includes(code) && /Wild Colours/.test(label), label);
+check('it is listed by code and game', label.includes(code) && /UNO/.test(label), label);
 await page.screenshot({ path: `${SHOT}/12-recent-tables.png`, fullPage: true });
 
 console.log('\nGoing back rebuilds it from disk');
@@ -65,8 +65,8 @@ await page.waitForTimeout(2800);
 
 const after = await state();
 check('the same room code came back', (await page.textContent('.topbar .room .code')).trim() === code);
-check('the pack came back', after.packName === 'Wild Colours', after.packName);
-check('every card is still there', Object.keys(after.pieces).length === 108, `${Object.keys(after.pieces).length}`);
+check('the pack came back', after.packName === 'UNO', after.packName);
+check('every card is still there', Object.keys(after.pieces).length === 54, `${Object.keys(after.pieces).length}`);
 check('the table says it was restored',
   after.log.some((l) => /restored/i.test(l.text)), after.log.map((l) => l.text).slice(-3).join(' | '));
 

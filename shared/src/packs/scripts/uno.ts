@@ -1,5 +1,5 @@
 /**
- * Wild Colours rules, as a pack script.
+ * UNO rules, as a pack script.
  *
  * The classic colour-and-number shedding game: match the colour or the symbol of the
  * top card, skips and reverses and draw-twos do what you expect, and wilds let the
@@ -10,7 +10,7 @@
  * "BR" a blue reverse, "YD" a yellow draw-two, "W" a wild and "W4" a wild draw four.
  */
 
-export const WILD_COLOURS_SCRIPT = `
+export const UNO_SCRIPT = `
 var COLOUR_NAMES = { R: 'red', Y: 'yellow', G: 'green', B: 'blue' };
 var SYMBOL_NAMES = { S: 'skip', R: 'reverse', D: 'draw two' };
 
@@ -96,7 +96,7 @@ function onSetup(table, reason) {
 
   if (seats.length === 0) {
     table.status('Take a seat, then press New round');
-    table.log('Wild Colours ready. Take a seat and press New round.');
+    table.log('UNO ready. Take a seat and press New round.');
     return;
   }
 
@@ -123,7 +123,7 @@ function onSetup(table, reason) {
     table.log('Starting card: ' + describe(top.face) + '.');
   }
   table.setVar('turn', seats[0]);
-  table.log('Wild Colours. Match the colour or the symbol. Wilds change the colour.');
+  table.log('UNO. Match the colour or the symbol. Wilds change the colour.');
   announce(table);
 }
 

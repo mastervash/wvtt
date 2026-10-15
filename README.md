@@ -6,7 +6,7 @@ a phone or a desktop, in a room you share with a six-character code. No account 
 Games are **packs**: plain JSON describing the components, the table layout and an
 optional rules script. Chess and poker are packs. So is anything you make.
 
-![A hand of Wild Colours in progress: the draw pile, the discard, another player's
+![A hand of UNO in progress: the draw pile, the discard, another player's
 face-down hand across the table, and your own hand mirrored in the tray along the
 bottom](docs/images/table.png)
 
@@ -270,7 +270,7 @@ move.
 | Dice Tray | Full polyhedral set, rolled by the server so results are honest. |
 | Blank Board | A 10×10 grid and tokens, meant to be copied and edited. |
 | Crazy Eights | Fully enforced: turn order, legal plays, and winning by emptying your hand. |
-| Wild Colours | Match the colour or the symbol. Skips, reverses, draw-twos and wilds. |
+| UNO | Match the colour or the symbol. Skips, reverses, draw twos and wilds. |
 | Prompt Party | Fill in the blank; answers are played face down and a rotating judge picks a winner. |
 | Ransom Note | Answer the prompt with the words you were dealt; the judge reads the notes out and picks one. |
 | Short Fuse | Draw until someone blows up. Defuses, attacks, skips, peeks, favours and Nopes. |
@@ -278,10 +278,10 @@ move.
 | Chess | Snapping 8×8 board with enforced moves, captures and check. |
 
 The home page splits these in two: sandboxes on the left, packs that referee themselves
-on the right. Wild Colours, Prompt Party, Ransom Note and Short Fuse are original packs
-built from plain text cards — no licensed content — and all four are meant to be copied
-and rewritten. Prompt Party and Ransom Note in particular ship deliberately mild decks; swap
-the lists for your group's own in the editor.
+on the right. UNO, Prompt Party, Ransom Note and Short Fuse are editable packs that can be
+copied and rewritten in the editor. UNO ships with the repository's supplied 54-card image
+set; Prompt Party and Ransom Note deliberately use mild starter decks, so swap their lists
+for your group's own in the editor.
 
 In Ransom Note you build a reply one word at a time: drag a word into the strip in front
 of you, or right-click it and choose **Add to my note**. What you have written is sent

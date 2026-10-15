@@ -78,7 +78,7 @@ async function join(code, name, height = 600) {
 const shots = {
   async table() {
     const p = await page(645);
-    const code = await table(p, 'Wild Colours');
+    const code = await table(p, 'UNO');
     const b = await join(code, 'Ben', 645);
     // The pack deals and starts the game itself; its own buttons are the way in.
     const deal = p.locator('.topbar .game-action').first();

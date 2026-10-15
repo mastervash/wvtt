@@ -1,5 +1,5 @@
 /**
- * The scripted party packs: Wild Colours, Prompt Party and Ransom Note.
+ * The scripted party packs: UNO, Prompt Party and Ransom Note.
  *
  * Run through real rooms and real clients, because the thing most worth checking is
  * not the rules but the hidden information around them: a face-down submission must be
@@ -36,7 +36,7 @@ const readable = (s: Snap, z: string) => inZone(s, z).filter((p) => p.secret?.fa
 const logText = (s: Snap, n = 8) => s.log.slice(-n).map((l) => l.text).join(' | ');
 
 /* ------------------------------------------------------------------ *
- * Wild Colours
+ * UNO
  * ------------------------------------------------------------------ */
 
 const isWild = (face: string) => face.charAt(0) === 'W';
@@ -47,10 +47,10 @@ function matches(face: string, top: string): boolean {
   return isWild(face) || colourOf(face) === colourOf(top) || symbolOf(face) === symbolOf(top);
 }
 
-async function wildColours(port: number) {
-  console.log('\n=== Wild Colours ===');
+async function uno(port: number) {
+  console.log('\n=== UNO ===');
   const ca = new Client(`ws://localhost:${port}`);
-  const roomA = await ca.joinOrCreate('table', { name: 'Ana', packId: 'wildcolours' });
+  const roomA = await ca.joinOrCreate('table', { name: 'Ana', packId: 'uno' });
   await sleep(400);
   const cb = new Client(`ws://localhost:${port}`);
   const roomB = await cb.joinById(roomA.roomId, { name: 'Ben' });
@@ -171,7 +171,7 @@ async function wildColours(port: number) {
       `${inZone(after, 'hand0').length}/${inZone(after, 'hand1').length}`);
     check('nothing is left on the discard', inZone(after, 'discard').length === 0,
       `${inZone(after, 'discard').length}`);
-    check('the whole deck is back', inZone(after, 'draw').length === 108, `${inZone(after, 'draw').length}`);
+    check('the whole deck is back', inZone(after, 'draw').length === 54, `${inZone(after, 'draw').length}`);
     check('the status says so', /cleared/i.test(after.status), after.status);
 
     // ...and dealing again still works afterwards.
@@ -414,7 +414,7 @@ async function main() {
   gameServer.define('table', TableRoom);
   await gameServer.listen(PORT);
 
-  await wildColours(PORT);
+  await uno(PORT);
   await promptParty(PORT);
   await ransomNote(PORT);
 
